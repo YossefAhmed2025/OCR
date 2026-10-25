@@ -1,0 +1,65 @@
+# Fine-tune arabic_PP-OCRv5_mobile_rec on vowelled Arabic.
+#
+# Run from the OCR/ directory:
+#   .venv\Scripts\python.exe -m paddlex --check_dataset -c configs\arabic_vowelled_rec.yaml
+#   .venv\Scripts\python.exe -m paddlex --train         -c configs\arabic_vowelled_rec.yaml
+#   .venv\Scripts\python.exe -m paddlex --evaluate      -c configs\arabic_vowelled_rec.yaml
+#
+# Why these values
+# ----------------
+# device gpu:0        one RTX 3050 Ti, 4 GB. The stock config says
+#                     gpu:0,1,2,3 which does not exist here.
+# batch_size 64       fits 4 GB at height 48. Drop to 32 on OOM.
+# learning_rate 5e-4  half the stock 1e-3: this is a warm start from
+#                     weights that already read Arabic, so the aim is
+#                     to move the diacritic behaviour without
+#                     destroying the letter recognition that already
+#                     works (measured: consonant skeleton came back
+#                     correct on a real page, diacritics did not).
+# epochs 40           23k samples / batch 64 = ~359 steps per epoch.
+#                     A community run on 50k samples plateaued near
+#                     81% after 300 epochs, so treat 40 as a first
+#                     measurement, not a finish line.
+#
+# The pretrain weight is fetched over the network once. Training is
+# the only online step; inference stays offline.
+
+Global:
+  model: arabic_PP-OCRv5_mobile_rec
+  mode: check_dataset          # overridden by the --train / --evaluate flags
+  dataset_dir: "data/train_rec"
+  device: gpu:0
+  output: "output/arabic_vowelled"
+
+CheckDataset:
+  convert:
+    enable: False
+    src_dataset_type: null
+  split:
+    enable: False              # train.txt / val.txt are pre-split 23000/2000
+    train_percent: null
+    val_percent: null
+
+Train:
+  epochs_iters: 40
+  batch_size: 64
+  learning_rate: 0.0005
+  pretrain_weight_path: https://paddle-model-ecology.bj.bcebos.com/paddlex/official_pretrained_model/arabic_PP-OCRv5_mobile_rec_pretrained.pdparams
+  resume_path: null
+  log_interval: 50
+  eval_interval: 1
+  save_interval: 1
+
+Evaluate:
+  weight_path: "output/arabic_vowelled/best_accuracy/best_accuracy.pdparams"
+  log_interval: 1
+
+Export:
+  weight_path: "output/arabic_vowelled/best_accuracy/best_accuracy.pdparams"
+
+Predict:
+  batch_size: 1
+  model_dir: "output/arabic_vowelled/best_accuracy/inference"
+  input: "data/train_rec/images/0000000.jpg"
+  kernel_option:
+    run_mode: paddle
