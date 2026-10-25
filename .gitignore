@@ -47,3 +47,8 @@ desktop.ini
 # training data (25k rendered line crops, regenerate with
 # scripts/make_training_data.py)
 data/train_rec/
+
+# fine-tuning artefacts
+pretrained/
+output/
+data/train_rec_ready/

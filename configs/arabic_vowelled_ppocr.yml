@@ -1,0 +1,184 @@
+# Fine-tune arabic_PP-OCRv5_mobile_rec on vowelled Arabic.
+#
+# Derived from the official PaddleOCR config
+#   configs/rec/PP-OCRv5/multi_language/arabic_PP-OCRv5_mobile_rec.yaml
+# with only the changes this machine and dataset require. Every
+# deviation is commented; everything else is upstream's.
+#
+# Run from OCR/ :
+#   set PYTHONPATH=<repo>
+#   .venv\Scripts\python.exe <repo>\tools\train.py -c configs\arabic_vowelled_ppocr.yml
+#
+# See scripts/train_arabic.py, which sets the paths and launches this.
+
+Global:
+  model_name: arabic_PP-OCRv5_mobile_rec
+  debug: false
+  use_gpu: true
+  # CHANGED 75 -> 40. First measurement, not a finish line: a
+  # community run on 50k samples plateaued near 81% after 300 epochs.
+  epoch_num: 40
+  log_smooth_window: 20
+  print_batch_step: 50
+  save_model_dir: ./output/arabic_vowelled
+  save_epoch_step: 5
+  # CHANGED to evaluate every 500 steps: 21k samples at batch 32 is
+  # ~657 steps per epoch, so this gives roughly one eval per epoch
+  # while still catching an early divergence.
+  eval_batch_step: [0, 500]
+  cal_metric_during_train: true
+  # CHANGED: warm start from the official Arabic weights. Without
+  # this the run is training from scratch on 21k samples, which will
+  # not work.
+  pretrained_model: ./pretrained/arabic_PP-OCRv5_mobile_rec_pretrained
+  checkpoints:
+  save_inference_dir:
+  use_visualdl: false
+  infer_img:
+  # CHANGED to the copy in our prepared dataset. It is the OFFICIAL
+  # 747-entry dictionary, byte-identical to the repo's. Using a
+  # smaller locally-derived dictionary would change the CTC head's
+  # output width and make the pretrained weights unloadable.
+  # The filename must keep "arabic" in it: that substring is what
+  # switches the label decoder into its reverse path for RTL text.
+  character_dict_path: ./data/train_rec_ready/ppocrv5_arabic_dict.txt
+  # CHANGED 25 -> 35. Our vowelled lines run longer than unvowelled
+  # text because every diacritic is its own character. The hard
+  # ceiling is 40: training resizes to width 320 and the width stride
+  # is 8, giving exactly 40 CTC timesteps, and CTC cannot align a
+  # label longer than the sequence. prepare_training_set.py drops
+  # anything above 35.
+  max_text_length: &max_text_length 35
+  infer_mode: false
+  use_space_char: true
+  # CHANGED true -> false: one GPU, no distributed launcher.
+  distributed: false
+  save_res_path: ./output/arabic_vowelled/predicts.txt
+  d2s_train_image_shape: [3, 48, 320]
+
+Optimizer:
+  name: Adam
+  beta1: 0.9
+  beta2: 0.999
+  lr:
+    name: Cosine
+    learning_rate: 0.0005
+    # CHANGED 5 -> 2. Fewer total epochs, so a 5-epoch warmup would
+    # spend an eighth of the run below target learning rate.
+    warmup_epoch: 2
+  regularizer:
+    name: L2
+    factor: 3.0e-05
+
+Architecture:
+  model_type: rec
+  algorithm: SVTR_LCNet
+  Transform:
+  Backbone:
+    name: PPLCNetV3
+    scale: 0.95
+  Head:
+    name: MultiHead
+    head_list:
+      - CTCHead:
+          Neck:
+            name: svtr
+            dims: 120
+            depth: 2
+            hidden_dims: 120
+            kernel_size: [1, 3]
+            use_guide: True
+          Head:
+            fc_decay: 0.00001
+      - NRTRHead:
+          nrtr_dim: 384
+          max_text_length: *max_text_length
+
+Loss:
+  name: MultiLoss
+  loss_config_list:
+    - CTCLoss:
+    - NRTRLoss:
+
+PostProcess:
+  name: CTCLabelDecode
+
+Metric:
+  name: RecMetric
+  main_indicator: acc
+  ignore_space: False
+
+Train:
+  dataset:
+    name: MultiScaleDataSet
+    ds_width: false
+    data_dir: ./data/train_rec_ready/
+    ext_op_transform_idx: 1
+    label_file_list:
+    - ./data/train_rec_ready/train.txt
+    transforms:
+    - DecodeImage:
+        img_mode: BGR
+        channel_first: false
+    - RecConAug:
+        prob: 0.5
+        ext_data_num: 2
+        image_shape: [48, 320, 3]
+        max_text_length: *max_text_length
+    - RecAug:
+    - MultiLabelEncode:
+        gtc_encode: NRTRLabelEncode
+    - KeepKeys:
+        keep_keys:
+        - image
+        - label_ctc
+        - label_gtc
+        - length
+        - valid_ratio
+  sampler:
+    name: MultiScaleSampler
+    # CHANGED: dropped the 320x64 scale. On a 4 GB card the tall scale
+    # pushed max_mem_allocated to 4335 MB against 4095 MB of VRAM, so
+    # Paddle spilled to host memory and throughput collapsed to
+    # 5.9 samples/s (about an hour per epoch). Our crops are rendered
+    # at height 48, so 64 was upsampling anyway.
+    scales: [[320, 32], [320, 48]]
+    # CHANGED 128 -> 16 for the same reason.
+    first_bs: &bs 16
+    fix_bs: false
+    divided_factor: [8, 16]
+    is_training: True
+  loader:
+    shuffle: true
+    batch_size_per_card: *bs
+    drop_last: true
+    # CHANGED 8 -> 0. Windows spawns rather than forks, and Paddle's
+    # multiprocess loader deadlocks here. 0 keeps loading in-process.
+    num_workers: 0
+
+Eval:
+  dataset:
+    name: SimpleDataSet
+    data_dir: ./data/train_rec_ready/
+    label_file_list:
+    - ./data/train_rec_ready/val.txt
+    transforms:
+    - DecodeImage:
+        img_mode: BGR
+        channel_first: false
+    - MultiLabelEncode:
+        gtc_encode: NRTRLabelEncode
+    - RecResizeImg:
+        image_shape: [3, 48, 320]
+    - KeepKeys:
+        keep_keys:
+        - image
+        - label_ctc
+        - label_gtc
+        - length
+        - valid_ratio
+  loader:
+    shuffle: false          # CHANGED: deterministic evaluation
+    drop_last: false
+    batch_size_per_card: 32  # CHANGED 128 -> 32 for 4 GB
+    num_workers: 0           # CHANGED 4 -> 0, as above
