@@ -1,0 +1,5 @@
+{"id": "ar_tashkeel_001", "image": "../input/ar_tashkeel_001.jpg", "lang": "ar", "group": "arabic_tashkeel", "text": "كَتَبَ الْوَلَدُ الدَّرْسَ", "notes": "TEMPLATE ROW - replace with a real labelled image. Fully vowelled."}
+{"id": "ar_plain_001", "image": "../input/ar_plain_001.jpg", "lang": "ar", "group": "arabic_plain", "text": "كتب الولد الدرس", "notes": "TEMPLATE ROW - replace. Same sentence, no tashkeel."}
+{"id": "en_001", "image": "../input/en_001.jpg", "lang": "en", "group": "english", "text": "The boy wrote the lesson", "notes": "TEMPLATE ROW - replace."}
+{"id": "mixed_001", "image": "../input/mixed_001.jpg", "lang": "mixed", "group": "mixed", "text": "الكتاب book", "notes": "TEMPLATE ROW - replace. See docs/architecture.md on mixed-language limits."}
+{"id": "blur_001", "image": "../input/blur_001.jpg", "lang": "ar", "group": "degraded", "text": "قرأ الطفل القصة", "notes": "TEMPLATE ROW - replace. Degraded: blur / angle / uneven light."}

@@ -1,0 +1,49 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+
+# Model weights -- large binaries, re-fetchable with
+# `python scripts/download_models.py`. The manifest IS tracked so the
+# exact files a run used stay recorded.
+models/*
+!models/README.md
+!models/manifest.json
+
+# Inputs and outputs. Page images may contain copyrighted book content
+# and are kept out of version control by default.
+data/input/*
+!data/input/.gitkeep
+data/results/*
+!data/results/.gitkeep
+data/samples/*
+!data/samples/README.md
+
+# Ground truth: the labels are tracked, the images they point at are not.
+data/ground_truth/*
+!data/ground_truth/.gitkeep
+!data/ground_truth/README.md
+!data/ground_truth/example.jsonl
+
+# Environment
+.env
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+
+# training data (25k rendered line crops, regenerate with
+# scripts/make_training_data.py)
+data/train_rec/

@@ -1,0 +1,24 @@
+# Phonics Prism OCR -- shared runtime dependencies.
+#
+# This file does NOT install PaddlePaddle. The PaddlePaddle build is
+# hardware-specific and must come from PaddlePaddle's own package index,
+# so it lives in requirements-gpu.txt / requirements-cpu.txt.
+#
+# Install order:
+#   1. pip install -r requirements-gpu.txt   (or requirements-cpu.txt)
+#   2. pip install -r requirements.txt
+
+paddleocr==3.7.0
+
+# Image I/O and preprocessing.
+opencv-python>=4.9,<5
+numpy>=1.24,<3
+Pillow>=10.0
+
+# Arabic display shaping -- used ONLY to draw readable labels on the
+# visualisation PNGs. It never touches stored or evaluated text.
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+
+# Tests.
+pytest>=8.0

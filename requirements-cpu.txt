@@ -1,0 +1,16 @@
+# PaddlePaddle CPU build.
+#
+# Use this when there is no NVIDIA GPU, when the driver is too old for
+# any CUDA build, or when disk space is short (~1 GB vs ~4 GB).
+#
+# INSTALL (the -i flag is required):
+#   pip install -r requirements-cpu.txt -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+#
+# Source:
+#   https://www.paddlepaddle.org.cn/documentation/docs/en/install/pip/windows-pip_en.html
+#
+# Do NOT install this alongside requirements-gpu.txt -- uninstall the
+# other first:
+#   pip uninstall -y paddlepaddle paddlepaddle-gpu
+
+paddlepaddle==3.3.1

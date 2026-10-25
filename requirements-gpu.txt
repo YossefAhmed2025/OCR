@@ -1,0 +1,33 @@
+# PaddlePaddle GPU build -- CUDA 11.8.
+#
+# WHY cu118 AND NOT cu126/cu129
+# -----------------------------
+# PaddlePaddle's Windows GPU builds state these minimum NVIDIA drivers:
+#     cu118  ->  Windows driver >= 452.39
+#     cu126  ->  driver >= 550.54.14
+#     cu129  ->  driver >= 550.54.14
+# Source:
+#   https://www.paddleocr.ai/main/en/version3.x/paddlepaddle_installation.html
+#   https://www.paddlepaddle.org.cn/documentation/docs/en/install/pip/windows-pip_en.html
+#
+# This machine's driver is 546.30, which clears cu118 but NOT cu126.
+# Re-check with `python scripts/check_environment.py` before changing
+# this: that script prints the installed driver and which builds it
+# supports.
+#
+# The wheel pulls the CUDA 11.8 runtime and cuDNN in as pip packages
+# (nvidia-cudnn-cu11, nvidia-cublas-cu11, ...), so a separate CUDA
+# Toolkit installation is NOT required.
+#
+# This index URL is mandatory: the PyPI copy of paddlepaddle-gpu is
+# stale and does not carry current CUDA 12.x/11.8 Windows builds.
+#
+# INSTALL (the -i flag is required):
+#   pip install -r requirements-gpu.txt -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+#
+# Do NOT install this alongside requirements-cpu.txt. The two packages
+# both provide the `paddle` module and will shadow each other.
+#
+# Disk: roughly 4 GB installed.
+
+paddlepaddle-gpu==3.3.1

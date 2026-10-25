@@ -1,0 +1,274 @@
+{
+  "generated_at": "2026-10-23T23:05:21+00:00",
+  "ocr_version": "PP-OCRv5",
+  "paddleocr_version": "3.7.0",
+  "detection_model": "PP-OCRv5_mobile_det",
+  "recognition_models": {
+    "ar": "arabic_PP-OCRv5_mobile_rec",
+    "en": "en_PP-OCRv5_mobile_rec"
+  },
+  "note": "Checksums are of the files as downloaded into this project. They pin what this machine is running; they are not official upstream checksums, which PaddleOCR does not publish per file.",
+  "models": [
+    {
+      "name": "PP-OCRv5_mobile_det",
+      "present": true,
+      "local_dir": "C:\\Users\\Owner\\Desktop\\Phonics_Prism_Manufacturing_Design_Spec_Arabic\\models\\PP-OCRv5_mobile_det",
+      "ocr_version": "PP-OCRv5",
+      "source": "PaddleOCR official model cache, resolved by the installed paddleocr/paddlex release. See https://www.paddleocr.ai/main/en/version3.x/",
+      "n_files": 15,
+      "total_bytes": 4946018,
+      "total_human": "4.7 MB",
+      "files": [
+        {
+          "name": ".cache/huggingface/.gitignore",
+          "bytes": 1,
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        },
+        {
+          "name": ".cache/huggingface/CACHEDIR.TAG",
+          "bytes": 195,
+          "sha256": "e8893e2dcb3f4545ef67a0a5b7b769113d38eef1aa61c7c7ba14659b02af955f"
+        },
+        {
+          "name": ".cache/huggingface/download/.gitattributes.metadata",
+          "bytes": 104,
+          "sha256": "9fc7b3a6727216eb2a70b580f741d140848a5798d27fd5ff585466e9e804daa3"
+        },
+        {
+          "name": ".cache/huggingface/download/config.json.metadata",
+          "bytes": 103,
+          "sha256": "c93aa766a2795c463af470d216e5f4339b27ef50f3894c16135f91afbffa2c3f"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.json.metadata",
+          "bytes": 104,
+          "sha256": "90f8f9010ed6695e051d8200aa1c1670efe2dc1b2b093a154be8bf8df35fdc3f"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.pdiparams.metadata",
+          "bytes": 128,
+          "sha256": "bcbe1717e197e9002a62b68b244add3610f5abf98af1b9d8a19b4469539bb9bc"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.yml.metadata",
+          "bytes": 104,
+          "sha256": "c69b1f9d16b31e05b21cef4faa3579eee6ad16f786494937ed903c8b19889b70"
+        },
+        {
+          "name": ".cache/huggingface/download/README.md.metadata",
+          "bytes": 104,
+          "sha256": "85726e98315aaf3e350a7e1d8817a92c337da66296d4bdd54513271b0eabc03f"
+        },
+        {
+          "name": ".cache/huggingface/trees/0d63e78e2b680928f6b1747d76a08db6e645efb7.json",
+          "bytes": 869,
+          "sha256": "52f183ab0177d44d00b03b1978572d9d4991b13fc7cc9854f3807acfab7d903b"
+        },
+        {
+          "name": ".gitattributes",
+          "bytes": 1575,
+          "sha256": "a3a43406012ee8c7b9b38dfab1b11610f33e8245cd864a9a9302d042616a859e"
+        },
+        {
+          "name": "config.json",
+          "bytes": 2871,
+          "sha256": "7ac1c33f377ba58561f4b89d3180b6add2b7c5c60a4edac90fa4e0ceccdc6665"
+        },
+        {
+          "name": "inference.json",
+          "bytes": 229777,
+          "sha256": "05feef1acb00aa4cd7362b15f7f501fc4f99d7b1fa73c1c871e0c7b1504b0f5c"
+        },
+        {
+          "name": "inference.pdiparams",
+          "bytes": 4692937,
+          "sha256": "afa1820cb16c1fd0dad589d0f8b389139061c1ef6d68019685fd07be997dda5b"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 903,
+          "sha256": "98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699"
+        },
+        {
+          "name": "README.md",
+          "bytes": 16243,
+          "sha256": "4cc20ad6d41af86b3ce9885ffb0956e152574a2eb14179aeb07fd2d3956161ca"
+        }
+      ]
+    },
+    {
+      "name": "arabic_PP-OCRv5_mobile_rec",
+      "present": true,
+      "local_dir": "C:\\Users\\Owner\\Desktop\\Phonics_Prism_Manufacturing_Design_Spec_Arabic\\models\\arabic_PP-OCRv5_mobile_rec",
+      "ocr_version": "PP-OCRv5",
+      "source": "PaddleOCR official model cache, resolved by the installed paddleocr/paddlex release. See https://www.paddleocr.ai/main/en/version3.x/",
+      "n_files": 15,
+      "total_bytes": 8173030,
+      "total_human": "7.8 MB",
+      "files": [
+        {
+          "name": ".cache/huggingface/.gitignore",
+          "bytes": 1,
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        },
+        {
+          "name": ".cache/huggingface/CACHEDIR.TAG",
+          "bytes": 195,
+          "sha256": "e8893e2dcb3f4545ef67a0a5b7b769113d38eef1aa61c7c7ba14659b02af955f"
+        },
+        {
+          "name": ".cache/huggingface/download/.gitattributes.metadata",
+          "bytes": 103,
+          "sha256": "411709dcc1b49993fbf3be56ad5fd53ab7f8ae330eb4a59208293662d2e78168"
+        },
+        {
+          "name": ".cache/huggingface/download/config.json.metadata",
+          "bytes": 104,
+          "sha256": "0031c9dd55a482de9f8572ea7378ada32ecab5b4aecc95d251cc4974f022a5a7"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.json.metadata",
+          "bytes": 104,
+          "sha256": "96447cf98bbb821be633609e53c35c467d07c60261b6d39f5c04959bbb6b974c"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.pdiparams.metadata",
+          "bytes": 127,
+          "sha256": "8f0e87be3ad459aa773ebc9c38527809f08c983fdf696fff7dbd77fb7bc5cac2"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.yml.metadata",
+          "bytes": 104,
+          "sha256": "c9f2e25d219c253624759d353f46e798ed13f2792230b2117ee2177399916d68"
+        },
+        {
+          "name": ".cache/huggingface/download/README.md.metadata",
+          "bytes": 104,
+          "sha256": "d26017b8cf01f473d3acf36987e04dbc0b2d7904959f6c849070d19745b3c084"
+        },
+        {
+          "name": ".cache/huggingface/trees/33d91636a65dca87f5562cc48860332ae367ee1b.json",
+          "bytes": 870,
+          "sha256": "6ad79b9983f6b3badc2f8dbdae1978a157d4d86c20da4601509af8030fe85a47"
+        },
+        {
+          "name": ".gitattributes",
+          "bytes": 1575,
+          "sha256": "a3a43406012ee8c7b9b38dfab1b11610f33e8245cd864a9a9302d042616a859e"
+        },
+        {
+          "name": "config.json",
+          "bytes": 16077,
+          "sha256": "b531536bb3245c271db69ffcc2f343b2f1d4db0c1441bc8f9834bd06cf41ac00"
+        },
+        {
+          "name": "inference.json",
+          "bytes": 217712,
+          "sha256": "d43832804d89c0e18d59f8446a3babd0ef60c44bc335efddac3176caf71d50af"
+        },
+        {
+          "name": "inference.pdiparams",
+          "bytes": 7922839,
+          "sha256": "4b4271fd1dd89a40b2056e1a42e58de7c0df2fdcf1a97ca9a8916d7ec45f9143"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 6165,
+          "sha256": "21368419e6c016c31db55d316d59e11c128e1913e6e6fe10287084710043d3a6"
+        },
+        {
+          "name": "README.md",
+          "bytes": 6950,
+          "sha256": "9407c910bfbff151146db58c7e2b0fc35a65bd5a140a14b139e4f558ecb0380b"
+        }
+      ]
+    },
+    {
+      "name": "en_PP-OCRv5_mobile_rec",
+      "present": true,
+      "local_dir": "C:\\Users\\Owner\\Desktop\\Phonics_Prism_Manufacturing_Design_Spec_Arabic\\models\\en_PP-OCRv5_mobile_rec",
+      "ocr_version": "PP-OCRv5",
+      "source": "PaddleOCR official model cache, resolved by the installed paddleocr/paddlex release. See https://www.paddleocr.ai/main/en/version3.x/",
+      "n_files": 15,
+      "total_bytes": 8014641,
+      "total_human": "7.6 MB",
+      "files": [
+        {
+          "name": ".cache/huggingface/.gitignore",
+          "bytes": 1,
+          "sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1"
+        },
+        {
+          "name": ".cache/huggingface/CACHEDIR.TAG",
+          "bytes": 195,
+          "sha256": "e8893e2dcb3f4545ef67a0a5b7b769113d38eef1aa61c7c7ba14659b02af955f"
+        },
+        {
+          "name": ".cache/huggingface/download/.gitattributes.metadata",
+          "bytes": 103,
+          "sha256": "dfdf6bf4970b7b1bb7d12d4da5c93b25611cfd216520fa477c43ab9157b80031"
+        },
+        {
+          "name": ".cache/huggingface/download/config.json.metadata",
+          "bytes": 104,
+          "sha256": "439c8803fc2cf368028d9ee27e05373de7ca767ee4cd8729770a773a81c27321"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.json.metadata",
+          "bytes": 103,
+          "sha256": "472814a7da9997547e3e256cae9e2ec28531f388fbd3c466a6ad15f2da08cf1b"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.pdiparams.metadata",
+          "bytes": 128,
+          "sha256": "2ba9e1e49fae67a06afbe6d8ea4afa92197431165a317d361bf489b4726df25e"
+        },
+        {
+          "name": ".cache/huggingface/download/inference.yml.metadata",
+          "bytes": 104,
+          "sha256": "f0170ba06776ff4f2974c6f52ec884674405f0985f5fba56951866ce654b7291"
+        },
+        {
+          "name": ".cache/huggingface/download/README.md.metadata",
+          "bytes": 104,
+          "sha256": "fa0fde01a14501456810434509fc427a7d00606a7faff7dbc656bfcfaa14ca59"
+        },
+        {
+          "name": ".cache/huggingface/trees/267c36e24c331595590fe7bd72bde2436fd286f2.json",
+          "bytes": 870,
+          "sha256": "d38d53c7eafc1f99966f3992dba05b0286f584792322af4057699ec0d039f65c"
+        },
+        {
+          "name": ".gitattributes",
+          "bytes": 1575,
+          "sha256": "a3a43406012ee8c7b9b38dfab1b11610f33e8245cd864a9a9302d042616a859e"
+        },
+        {
+          "name": "config.json",
+          "bytes": 10455,
+          "sha256": "16103ac291a82fca50f0bb000d62a4b8168f6042f03c89c44cf32f241d1eb1f2"
+        },
+        {
+          "name": "inference.json",
+          "bytes": 217712,
+          "sha256": "fd1b6ec722ea841a72d3ba43e527df1d1066d5d7808e0503ee3eec7265188753"
+        },
+        {
+          "name": "inference.pdiparams",
+          "bytes": 7772315,
+          "sha256": "3ec8a97ed6cefe8568d3e2ee90bb193299b566a7661aa4fd52d224b96b59f66b"
+        },
+        {
+          "name": "inference.yml",
+          "bytes": 3964,
+          "sha256": "27e91d0582f40168aa218303c76e184bc78fa7a5d105aad0cfbad8458b441067"
+        },
+        {
+          "name": "README.md",
+          "bytes": 6908,
+          "sha256": "4c1cfd6e103b0966fe97505b5254cfa35a931d47d7effca97a9db47fb57dd699"
+        }
+      ]
+    }
+  ]
+}
