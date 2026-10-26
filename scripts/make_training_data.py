@@ -55,8 +55,17 @@ def main() -> int:
     parser.add_argument("--height", type=int, default=48)
     parser.add_argument("--max-words", type=int, default=4)
     parser.add_argument(
-        "--real-word-prob", type=float, default=0.55,
-        help="share of words drawn from the curated vowelled list",
+        "--real-word-prob", type=float, default=0.92,
+        help=(
+            "share of words taken verbatim from the real vowelled "
+            "lexicon. High on purpose: random vowelization measurably "
+            "taught the model to place marks without learning which "
+            "mark belongs."
+        ),
+    )
+    parser.add_argument(
+        "--lexicon", type=Path, default=None,
+        help="vowelled lexicon JSON (default: data/corpus/vowelled_lexicon.json)",
     )
     parser.add_argument(
         "--max-fonts", type=int, default=40, help="cap on distinct fonts used"
@@ -77,6 +86,18 @@ def main() -> int:
 
     configure_logging(False)
     rng = random.Random(args.seed)
+
+    lexicon = synth.load_lexicon(args.lexicon)
+    if lexicon:
+        print(f"Vowelled lexicon: {len(lexicon)} real words")
+    else:
+        print(
+            "WARNING: no vowelled lexicon found. Falling back to randomly\n"
+            "         vowelized nonsense, which measurably degrades the\n"
+            "         fine-tune. Build one first:\n"
+            "           python scripts/build_vowelled_lexicon.py"
+        )
+        lexicon = list(synth.SEED_WORDS)
 
     if not 0.0 <= args.val_split < 0.9:
         print("ERROR: --val-split must be in [0, 0.9)", file=sys.stderr)
@@ -122,6 +143,7 @@ def main() -> int:
             return 1
         text = synth.make_line(
             rng,
+            seed_words=lexicon,
             max_words=args.max_words,
             real_word_prob=args.real_word_prob,
         )
@@ -212,6 +234,8 @@ def main() -> int:
         "mean_tashkeel_per_line": round(mark_total / max(1, len(records)), 2),
         "distinct_diacritics_present": len(marks_present),
         "label_order": "VISUAL (bidi.get_display) -- PaddleOCR Arabic convention",
+        "lexicon_words": len(lexicon),
+        "real_word_prob": args.real_word_prob,
         "conventions": [
             "Labels are VISUAL order; PaddleOCR reverses at decode time.",
             f"Dict filename must contain 'arabic' ({DICT_NAME}) to enable "

@@ -229,3 +229,57 @@ class TestRendering:
         image, _ = synth.render_line(KATABA, font, synth.RenderConfig(), rng)
         assert image.dtype.name == "uint8"
         assert 0 < image.mean() < 255
+
+
+class TestVowelledLexicon:
+    """Real corpus words replace random vowelization.
+
+    The first fine-tune doubled diacritic recall but worsened CER,
+    traced to random vowelization teaching mark PLACEMENT without mark
+    IDENTITY. These lock in the replacement.
+    """
+
+    def test_load_returns_a_list(self):
+        words = synth.load_lexicon()
+        assert isinstance(words, list)
+
+    def test_missing_lexicon_returns_empty_not_error(self, tmp_path):
+        # The generator warns and falls back; it must not crash.
+        assert synth.load_lexicon(tmp_path / "nope.json") == []
+
+    def test_lexicon_words_are_vowelled(self):
+        words = synth.load_lexicon()
+        if not words:
+            pytest.skip("lexicon not built on this machine")
+        sample = words[:500]
+        assert all(pp.count_tashkeel(w) > 0 for w in sample)
+
+    def test_lexicon_words_use_base_characters(self):
+        words = synth.load_lexicon()
+        if not words:
+            pytest.skip("lexicon not built on this machine")
+        for word in words[:500]:
+            assert not any(is_presentation_form(c) for c in word)
+
+    def test_lexicon_words_are_arabic_only(self):
+        words = synth.load_lexicon()
+        if not words:
+            pytest.skip("lexicon not built on this machine")
+        for word in words[:500]:
+            assert all(pp.is_arabic_char(c) for c in word), word
+
+    def test_real_words_are_used_verbatim(self):
+        # Re-vowelizing a corpus word would reintroduce the exact bug
+        # this change fixes.
+        known = ["\u0645\u0650\u0646\u0652", "\u0642\u064e\u0627\u0644\u064e"]
+        rng = random.Random(3)
+        seen = set()
+        for _ in range(60):
+            seen.update(synth.make_line(rng, seed_words=known, real_word_prob=1.0).split())
+        assert seen <= set(known)
+
+    def test_default_real_word_prob_is_high(self):
+        import inspect
+
+        default = inspect.signature(synth.make_line).parameters["real_word_prob"].default
+        assert default >= 0.9

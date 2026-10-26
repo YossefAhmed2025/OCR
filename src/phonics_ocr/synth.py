@@ -200,24 +200,56 @@ def random_word(rng: random.Random, length: Optional[int] = None) -> str:
     return vowelize("".join(letters), rng)
 
 
+DEFAULT_LEXICON = Path(__file__).resolve().parents[2] / "data" / "corpus" / "vowelled_lexicon.json"
+
+
+def load_lexicon(path: Optional[Path] = None) -> List[str]:
+    """Load real vowelled words extracted from a corpus.
+
+    Strongly preferred over :func:`vowelize`. The first fine-tune
+    showed why: random vowelization taught the model *where* marks go
+    (diacritic recall doubled) but not *which* mark belongs (false
+    positives rose and CER got worse). Real words carry the
+    morphological patterns that make a vowel predictable from context,
+    which is the signal the recogniser needs.
+
+    Returns an empty list when the lexicon has not been built, so the
+    caller can fall back and say so rather than failing.
+    """
+    import json
+
+    path = Path(path) if path else DEFAULT_LEXICON
+    if not path.is_file():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return list(payload.get("words", []))
+
+
 def make_line(
     rng: random.Random,
     *,
     seed_words: Sequence[str] = SEED_WORDS,
     max_words: int = 4,
-    real_word_prob: float = 0.55,
+    real_word_prob: float = 0.92,
 ) -> str:
-    """One training line: between one and ``max_words`` vowelled words."""
+    """One training line: between one and ``max_words`` vowelled words.
+
+    ``real_word_prob`` defaults high because random vowelization is
+    actively harmful: measured, it taught the model to place marks
+    without learning which mark belongs. The small remainder of
+    synthetic words exists only to cover letter-diacritic pairs a
+    finite lexicon misses.
+    """
     count = rng.randint(1, max_words)
+    pool = list(seed_words)
     words: List[str] = []
     for _ in range(count):
-        if rng.random() < real_word_prob and seed_words:
-            word = rng.choice(list(seed_words))
-            if rng.random() < 0.25:
-                word = vowelize(pp.strip_tashkeel(word), rng)
+        if pool and rng.random() < real_word_prob:
+            # Real corpus words are used VERBATIM. Re-vowelizing them
+            # would reintroduce exactly the problem this fixes.
+            words.append(rng.choice(pool))
         else:
-            word = random_word(rng)
-        words.append(word)
+            words.append(random_word(rng))
     return " ".join(words)
 
 
