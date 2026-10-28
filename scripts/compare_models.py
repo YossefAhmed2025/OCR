@@ -35,7 +35,10 @@ def score_with_model(
     label: str,
 ) -> Dict[str, Any]:
     """Run one recognition model over the samples and score it."""
+    import numpy as np
+
     from phonics_ocr import evaluation as ev
+    from phonics_ocr import geometry as geo
     from phonics_ocr import postprocessing as pp
     from phonics_ocr.config import DEFAULT_MODEL_DIR, DETECTION_MODEL, OCRConfig
     from phonics_ocr.engine import EngineError, OCREngine
@@ -64,11 +67,27 @@ def score_with_model(
 
     for sample in samples:
         results = pipeline.predict(str(sample.image))
-        texts: List[str] = []
+        # Join in READING order, not detection order. PaddleOCR returns
+        # regions in whatever order detection emitted them; concatenating
+        # that way makes CER measure the ordering rather than the text,
+        # which hid a clear quality difference between two models on the
+        # first run of this script.
+        items: List[Any] = []
         for result in results or []:
             payload = result.json.get("res", result.json)
-            texts.extend(str(t) for t in (payload.get("rec_texts") or []))
-        hypothesis = " ".join(texts)
+            texts = [str(t) for t in (payload.get("rec_texts") or [])]
+            polys = payload.get("rec_polys")
+            if polys is None or len(polys) == 0:
+                polys = payload.get("dt_polys") or []
+            for text, poly in zip(texts, polys):
+                box = geo.polygon_to_bbox(geo.normalise_polygon(np.asarray(poly)))
+                items.append((text, box))
+
+        rtl = sum(
+            pp.script_profile(t)["arabic"] for t, _ in items
+        ) >= sum(pp.script_profile(t)["latin"] for t, _ in items)
+        order = pp.sort_regions_for_reading([b for _, b in items], rtl=rtl)
+        hypothesis = " ".join(items[i][0] for i in order)
 
         reference = pp.normalise_text(sample.text)
         got = pp.normalise_text(hypothesis)
