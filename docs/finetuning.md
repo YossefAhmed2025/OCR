@@ -1,7 +1,68 @@
 # Fine-tuning the Arabic recogniser on vowelled text
 
-> **Status:** training data generated and validated. **Training has
-> not been run.** Nothing here reports a trained-model result.
+> **Status:** trained, exported and measured against the baseline on a
+> real photographed page. Results in section 0.
+
+---
+
+## 0. Result (2026-10-30)
+
+Done. Two runs, both warm-started from `arabic_PP-OCRv5_mobile_rec`.
+
+Measured on a **real photographed book page**, 155 reference
+characters, vowelled text:
+
+| | baseline | run-1 random | run-2 ep27 | **run-2 final** |
+|---|---|---|---|---|
+| CER | 0.407 | 0.697 | 0.284 | **0.239** |
+| character accuracy | 59.4% | 30.3% | 71.6% | **76.1%** |
+| WER | 0.864 | 1.000 | 0.818 | **0.773** |
+| diacritic recall | 0.172 | 0.344 | 0.375 | **0.453** |
+| diacritic TP | 11/64 | 22/64 | 24/64 | **29/64** |
+
+Validation accuracy (exact line match, synthetic split): **0.854**.
+
+### What the two runs proved
+
+**run-1** trained on randomly vowelized words. Diacritic recall
+doubled but CER got *worse*: the model learned WHERE marks go without
+learning WHICH mark belongs. That is what random vowelization teaches.
+
+**run-2** replaced it with 120,000 real vowelled words from Tashkeela.
+Every metric improved together, which rules out the failure this
+project guards against -- the model did not buy CER by dropping marks,
+because recall rose at the same time.
+
+Qualitatively, the baseline systematically confused `خ` with `ح` and
+`و` with `ؤ`. The fine-tune reads both correctly, and `أَكْثَرُ` went
+from unreadable output to an exact match.
+
+### What it does not show
+
+* **One page.** 155 characters, one photograph. A direction, not a
+  number. `evaluation_protocol.md` section 6 puts a quotable figure at
+  50+ samples per group.
+* **Still short of spec.** 76.1% against the specification's 95%
+  character accuracy on vowelled 14-18pt text.
+* **Detection untouched.** This fine-tunes recognition only. Detection
+  still fails on pages whose text is large relative to the frame; see
+  `word_localization.md`.
+
+### Reproducing
+
+```bat
+python scriptsuild_vowelled_lexicon.py
+python scripts\make_training_data.py --n 26000 --seed 2026 --max-words 3
+python scripts\prepare_training_set.py
+python scripts	rain_arabic.py
+python scripts\export_finetuned.py --out modelsrabic_vowelled_rec_final
+python scripts\compare_models.py --ground-truth data\ground_truthook_page.jsonl ^
+    --candidate modelsrabic_vowelled_rec_final
+```
+
+Both runs lost their CUDA context partway through when the laptop
+slept. `train_arabic.py` resumes from `output/arabic_vowelled/latest`;
+disable sleep before a long run.
 
 ---
 
