@@ -32,23 +32,81 @@ from typing import Any, Dict, List
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-ARABIC: Dict[str, Any] = {
-    "lang": "ar",
-    "rtl": True,
-    "title": "حَرْفُ الْبَاءِ",
-    "words": ["بَابٌ", "بِنْتٌ", "بُرْتُقَالٌ"],
-    "lines": [
-        "فَتَحَتِ الْبِنْتُ الْبَابَ",
-        "أَكَلَ الْوَلَدُ الْبُرْتُقَالَ",
-    ],
-    # Sakkal Majalla: a Naskh-derived face that ships with Windows and
-    # is widely set in Arabic documents. Measured best of eight here
-    # at 93.0% character accuracy -- Traditional Arabic reached 85.0%
-    # and Amiri 63.0%, which is the Naskh weakness this model still has.
-    "font": "majalla.ttf",
-    "font_dir": r"C:\Windows\Fonts",
-    "stem": "phonics_baa",
-}
+WINDOWS_FONTS = r"C:\Windows\Fonts"
+
+#: Sakkal Majalla: a Naskh-derived face that ships with Windows and is
+#: widely set in Arabic documents. Measured best of eight at 93.0%
+#: character accuracy -- Traditional Arabic reached 85.0% and Amiri
+#: 63.0% on identical content, which is the Naskh weakness this model
+#: still has. Two pages below use the harder faces on purpose: a set
+#: that only contains the easy case cannot show anyone where the
+#: limit is.
+DEFAULT_AR_FONT = "majalla.ttf"
+
+
+def _ar(stem: str, title: str, words: List[str], lines: List[str],
+        font: str = DEFAULT_AR_FONT) -> Dict[str, Any]:
+    return {"lang": "ar", "rtl": True, "title": title, "words": words,
+            "lines": lines, "font": font, "font_dir": WINDOWS_FONTS,
+            "stem": stem}
+
+
+ARABIC_PAGES: List[Dict[str, Any]] = [
+    _ar(
+        "ar_01_baa", "حَرْفُ الْبَاءِ",
+        ["بَابٌ", "بِنْتٌ", "بُرْتُقَالٌ"],
+        ["فَتَحَتِ الْبِنْتُ الْبَابَ",
+         "أَكَلَ الْوَلَدُ الْبُرْتُقَالَ"],
+    ),
+    _ar(
+        "ar_02_meem", "حَرْفُ الْمِيمِ",
+        ["مَدْرَسَةٌ", "مِفْتَاحٌ", "مُعَلِّمٌ"],
+        ["ذَهَبَ الْوَلَدُ إِلَى الْمَدْرَسَةِ",
+         "الْمُعَلِّمُ يَكْتُبُ الدَّرْسَ"],
+    ),
+    _ar(
+        "ar_03_seen", "حَرْفُ السِّينِ",
+        ["سَمَكٌ", "سِتَارٌ", "سُلَّمٌ"],
+        ["السَّمَكُ يَسْبَحُ فِي الْمَاءِ",
+         "صَعِدَ الْقِطُّ عَلَى السُّلَّمِ"],
+    ),
+    _ar(
+        "ar_04_raa", "حَرْفُ الرَّاءِ",
+        ["رَجُلٌ", "رِيشَةٌ", "رُمَّانٌ"],
+        ["الرَّجُلُ يَقْرَأُ الْكِتَابَ",
+         "أَكَلَ الطِّفْلُ الرُّمَّانَ"],
+    ),
+    _ar(
+        "ar_05_dal", "حَرْفُ الدَّالِ",
+        ["دَفْتَرٌ", "دِيكٌ", "دُبٌّ"],
+        ["كَتَبْتُ الدَّرْسَ فِي الدَّفْتَرِ",
+         "صَاحَ الدِّيكُ فِي الصَّبَاحِ"],
+    ),
+    # A reading page rather than a letter drill: longer lines, which
+    # is what the product will actually be pointed at.
+    _ar(
+        "ar_06_reading", "قِرَاءَةٌ",
+        ["الشَّمْسُ", "الْقَمَرُ", "النُّجُومُ"],
+        ["تُشْرِقُ الشَّمْسُ فِي الصَّبَاحِ",
+         "الْقَمَرُ مُنِيرٌ فِي اللَّيْلِ"],
+    ),
+    # The same content in the two faces the model reads worst. These
+    # exist to be failed, so the gap is visible instead of hidden.
+    _ar(
+        "ar_07_naskh_trad", "حَرْفُ الْبَاءِ",
+        ["بَابٌ", "بِنْتٌ", "بُرْتُقَالٌ"],
+        ["فَتَحَتِ الْبِنْتُ الْبَابَ",
+         "أَكَلَ الْوَلَدُ الْبُرْتُقَالَ"],
+        font="trado.ttf",
+    ),
+    _ar(
+        "ar_08_naskh_amiri", "حَرْفُ الْبَاءِ",
+        ["بَابٌ", "بِنْتٌ", "بُرْتُقَالٌ"],
+        ["فَتَحَتِ الْبِنْتُ الْبَابَ",
+         "أَكَلَ الْوَلَدُ الْبُرْتُقَالَ"],
+        font="Amiri-Regular.ttf",
+    ),
+]
 
 ENGLISH: Dict[str, Any] = {
     "lang": "en",
@@ -60,9 +118,12 @@ ENGLISH: Dict[str, Any] = {
         "Bella reads a big blue book",
     ],
     "font": "georgia.ttf",
-    "font_dir": r"C:\Windows\Fonts",
+    "font_dir": WINDOWS_FONTS,
     "stem": "phonics_b_en",
 }
+
+#: Kept so the demo video's default paths still resolve.
+ARABIC = ARABIC_PAGES[0]
 
 WIDTH, HEIGHT = 1240, 1754
 
@@ -150,15 +211,33 @@ def main() -> int:
     )
     parser.add_argument("--lang", choices=["ar", "en", "both"], default="both")
     parser.add_argument("--font", default=None, help="override the page font")
+    parser.add_argument("--only", default=None,
+                        help="render one page by stem, e.g. ar_02_meem")
     parser.add_argument("--out-dir", type=Path,
                         default=PROJECT_ROOT / "data/input/demo")
     args = parser.parse_args()
 
-    specs = {"ar": [ARABIC], "en": [ENGLISH], "both": [ARABIC, ENGLISH]}[args.lang]
+    specs = {
+        "ar": list(ARABIC_PAGES),
+        "en": [ENGLISH],
+        "both": list(ARABIC_PAGES) + [ENGLISH],
+    }[args.lang]
+    if args.only:
+        specs = [s for s in specs if s["stem"] == args.only]
+        if not specs:
+            print(f"ERROR: no page named {args.only!r}", file=sys.stderr)
+            print("       have: " + ", ".join(s["stem"] for s in ARABIC_PAGES),
+                  file=sys.stderr)
+            return 1
+
     for spec in specs:
         font = args.font or spec["font"]
+        # Amiri lives with the project, not with the system fonts.
+        spec = dict(spec)
+        if font.startswith("Amiri"):
+            spec["font_dir"] = str(PROJECT_ROOT / "assets" / "fonts")
         path = render_page(spec, font, args.out_dir)
-        print(f"wrote {path}  ({spec['lang']}, {font})")
+        print(f"wrote {path.name:<22} {spec['lang']}  {font}")
     return 0
 
 
