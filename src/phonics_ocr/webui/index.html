@@ -178,6 +178,8 @@
       <select id="cam" title="الكاميرا" hidden></select>
       <button id="win" class="on" title="اقصر البث على مقاس A5">نافذة A5</button>
       <button id="start">تشغيل الكاميرا</button>
+      <button id="pick" title="اقرأ صورة من الجهاز">رفع صورة</button>
+      <input id="file" type="file" accept="image/*" hidden>
       <button id="snap" class="primary" disabled>التقاط وقراءة</button>
       <button id="again" hidden>رجوع للبث</button>
       <button id="stop" disabled>إيقاف</button>
@@ -235,12 +237,15 @@ function cropRect(){
 
 // Size the viewport in pixels so its shape matches the crop exactly.
 function placeViewport(){
-  if(!stream){ vp.hidden=true; return; }
+  const showing = stream || !shot.hidden;
+  if(!showing){ vp.hidden=true; return; }
   const s=vp.parentElement.getBoundingClientRect();
   const availW=Math.max(80, s.width-32), availH=Math.max(80, s.height-96);
-  const ar = useWindow
-    ? A5_AR
-    : (video.videoWidth ? video.videoWidth/video.videoHeight : 4/3);
+  // An upload keeps its own shape; only the live stream is cropped.
+  const ar = (!stream || !shot.hidden)
+    ? (shot.naturalWidth ? shot.naturalWidth/shot.naturalHeight : A5_AR)
+    : (useWindow ? A5_AR
+                 : (video.videoWidth ? video.videoWidth/video.videoHeight : 4/3));
   let h=availH, w=h*ar;
   if(w>availW){ w=availW; h=w/ar; }
   vp.style.width=Math.round(w)+'px';
@@ -345,8 +350,38 @@ function grab(){
 async function snap(){
   if(!stream) return;
   const data=grab(); if(!data) return;
+  await read(data);
+}
+
+// An uploaded file goes down the identical path: the server runs the
+// same pipeline on whatever bytes arrive, so a given image scores the
+// same whether it came from the camera or the disk. The only thing
+// that changes is the image -- a steady scan is not a hand-held frame.
+function upload(file){
+  if(!file) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      // Uploads are not cropped to A5: the file is already framed.
+      const c=document.createElement('canvas');
+      c.width=img.naturalWidth; c.height=img.naturalHeight;
+      c.getContext('2d').drawImage(img,0,0);
+      shot.src=c.toDataURL('image/png');
+      shot.hidden=false; video.hidden=true; vp.hidden=false;
+      $('again').hidden=!stream;
+      placeViewport();
+      read(c.toDataURL('image/jpeg',0.95));
+    };
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+
+async function read(data){
   lastFrame=data;
-  $('snap').disabled=true; $('resSub').textContent='جارٍ القراءة…';
+  $('snap').disabled=true; $('pick').disabled=true;
+  $('resSub').textContent='جارٍ القراءة…';
   $('list').innerHTML='<div class="empty">جارٍ المعالجة…</div>';
   const t0=performance.now();
   let r;
@@ -358,10 +393,10 @@ async function snap(){
   }catch(e){
     $('resSub').textContent='فشل';
     $('list').innerHTML='<div class="empty" style="color:#f06060">'+e.message+'</div>';
-    $('snap').disabled=false; return;
+    $('snap').disabled=!stream; $('pick').disabled=false; return;
   }
   render(r, (performance.now()-t0)/1000);
-  $('snap').disabled=false;
+  $('snap').disabled=!stream; $('pick').disabled=false;
 }
 
 // Display-only diacritic filter. The server keeps text_raw untouched
@@ -440,6 +475,8 @@ $('again').onclick=()=>{
   shot.hidden=true; video.hidden=false; $('again').hidden=true; placeViewport();
 };
 $('cam').onchange=start;
+$('pick').onclick=()=>$('file').click();
+$('file').onchange=e=>{ upload(e.target.files[0]); e.target.value=''; };
 
 $('win').onclick=()=>{
   useWindow=!useWindow;

@@ -1,18 +1,20 @@
-"""Record a demo video of the pipeline reading a page.
+"""Record a demo video of the pipeline reading pages.
 
     python scripts/make_demo_video.py
     python scripts/make_demo_video.py --image mypage.png --out demo.mp4
 
-Every word, box, score and metric drawn in the video comes from one
-real run of the pipeline, performed by this script. Nothing is typed
-in by hand. Where the model misreads a word the video shows the
-misread word, in red, next to what the page actually says -- a demo
-that hides its errors is worth nothing to the person deciding whether
-to ship this.
+Every word, box, score and metric drawn in the video comes from real
+runs of the pipeline, performed by this script. Nothing is typed in by
+hand. Where the model misreads a word the video shows the misread
+word, in red, against what the page actually says -- a demo that hides
+its errors is worth nothing to the person deciding whether to ship
+this.
 
-The page itself is generated (``make_demo_page.py``), which is the
-point: its correct transcription is known exactly, so the result can
-be scored rather than admired.
+The pages are generated (``make_demo_page.py``), which is the point:
+their correct transcription is known exactly, so the result can be
+scored rather than admired. The video does not caption them as
+generated, so whoever presents it should say so; a viewer will
+otherwise assume a photograph.
 """
 
 from __future__ import annotations
@@ -42,9 +44,13 @@ OK = (63, 185, 80)
 WARN = (210, 153, 34)
 BAD = (240, 96, 96)
 
+STAGE = (40, 96, 1000, 924)          # x, y, w, h
+PANEL_X = 1060
+
 
 def shaper():
-    """Arabic display text. delete_harakat=False is not optional."""
+    """Arabic UI strings, shaped so the marks land correctly."""
+    from phonics_ocr.shaping import ShapingError, render_line  # noqa: F401
     import arabic_reshaper
     from bidi.algorithm import get_display
 
@@ -52,14 +58,14 @@ def shaper():
     return lambda s: get_display(r.reshape(s))
 
 
-def run_ocr(image: Path, device: str) -> Dict[str, Any]:
+def run_ocr(image: Path, lang: str, device: str) -> Dict[str, Any]:
     from phonics_ocr.config import OCRConfig
     from phonics_ocr.engine import OCREngine
     from phonics_ocr.utils import set_offline_env
 
     set_offline_env()
     engine = OCREngine(
-        OCRConfig(lang="ar", device=device, model_dir=PROJECT_ROOT / "models",
+        OCRConfig(lang=lang, device=device, model_dir=PROJECT_ROOT / "models",
                   offline=True)
     )
     return engine.process_image(image)
@@ -76,6 +82,22 @@ def score(result: Dict[str, Any], expected: List[str]) -> Dict[str, Any]:
     cer = ev.character_error_rate(ref, got)
     dia = ev.diacritic_prf(ref, got)
     rw, gw = ev.tokenize_words(ref), ev.tokenize_words(got)
+
+    # Which regions contain a word the page does not have.
+    #
+    # Not by zipping the two word lists: one dropped word shifts every
+    # pair after it, and a misread then passes as correct. Not by
+    # substring either -- "baaba" is inside "al-baaba", so a wrong case
+    # ending slipped through as a match. Membership in the set of
+    # reference words is the test that catches both.
+    ref_words = set(ev.tokenize_words(ref))
+    wrong = {
+        r["text_raw"]
+        for r in result["regions"]
+        if r["text_raw"].strip()
+        and any(w not in ref_words
+                for w in ev.tokenize_words(pp.normalise_text(r["text_raw"])))
+    }
     return {
         "cer": cer.rate,
         "accuracy": 1.0 - cer.rate,
@@ -84,8 +106,28 @@ def score(result: Dict[str, Any], expected: List[str]) -> Dict[str, Any]:
         "marks_total": dia.true_positives + dia.false_negatives,
         "words_exact": sum(1 for a, b in zip(rw, gw) if a == b),
         "words_total": len(rw),
-        "truth_words": rw,
-        "read_words": gw,
+        "wrong": wrong,
+    }
+
+
+def build_segment(image: Path, device: str) -> Dict[str, Any]:
+    """Run the pipeline on one page and gather everything the frames need."""
+    import cv2
+
+    meta_path = image.with_suffix(".json")
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
+    lang = meta.get("lang", "ar")
+    expected = meta.get("expected_strings", [])
+
+    result = run_ocr(image, lang, device)
+    order = result["reading_order"]["region_indices"]
+    regions = [result["regions"][i] for i in order]
+    stats = score(result, expected) if expected else {}
+
+    page = cv2.cvtColor(cv2.imread(str(image)), cv2.COLOR_BGR2RGB)
+    return {
+        "image": image, "lang": lang, "meta": meta, "result": result,
+        "regions": regions, "stats": stats, "page": page,
     }
 
 
@@ -93,9 +135,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--image", type=Path,
-                        default=PROJECT_ROOT / "data/input/demo/phonics_baa.png")
-    parser.add_argument("--meta", type=Path, default=None)
+    parser.add_argument("--image", type=Path, action="append", default=None,
+                        help="repeatable; defaults to the Arabic and English pages")
     parser.add_argument("--out", type=Path,
                         default=PROJECT_ROOT / "data/results/demo/phonics_demo.mp4")
     parser.add_argument("--device", default="gpu")
@@ -106,76 +147,55 @@ def main() -> int:
     if not ffmpeg:
         print("ERROR: ffmpeg not on PATH.", file=sys.stderr)
         return 1
-    if not args.image.is_file():
-        print(f"ERROR: no image at {args.image}", file=sys.stderr)
+
+    images = args.image or [
+        PROJECT_ROOT / "data/input/demo/phonics_baa.png",
+        PROJECT_ROOT / "data/input/demo/phonics_b_en.png",
+    ]
+    missing = [p for p in images if not p.is_file()]
+    if missing:
+        print(f"ERROR: no image at {missing[0]}", file=sys.stderr)
+        print("       run scripts/make_demo_page.py first", file=sys.stderr)
         return 1
 
-    meta_path = args.meta or args.image.with_suffix(".json")
-    expected: List[str] = []
-    if meta_path.is_file():
-        expected = json.loads(meta_path.read_text(encoding="utf-8")).get(
-            "expected_strings", []
-        )
-
     import cv2
-    import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 
     sh = shaper()
     f_title = ImageFont.truetype("C:/Windows/Fonts/tahomabd.ttf", 30)
     f_sub = ImageFont.truetype("C:/Windows/Fonts/tahoma.ttf", 17)
-    f_ar = ImageFont.truetype("C:/Windows/Fonts/tahoma.ttf", 32)
-    f_ar_s = ImageFont.truetype("C:/Windows/Fonts/tahoma.ttf", 20)
+    f_ar = ImageFont.truetype("C:/Windows/Fonts/tahoma.ttf", 30)
     f_ui = ImageFont.truetype("C:/Windows/Fonts/tahoma.ttf", 19)
     f_num = ImageFont.truetype("C:/Windows/Fonts/tahomabd.ttf", 38)
     f_lbl = ImageFont.truetype("C:/Windows/Fonts/tahoma.ttf", 14)
 
-    print(f"Reading {args.image.name} ...")
-    result = run_ocr(args.image, args.device)
-    order = result["reading_order"]["region_indices"]
-    regions = [result["regions"][i] for i in order]
-    stats = score(result, expected) if expected else {}
-    print(f"  {len(regions)} regions in {result['timing']['inference_seconds']:.2f}s")
-    if stats:
-        print(f"  accuracy {stats['accuracy']:.1%}, "
-              f"{stats['words_exact']}/{stats['words_total']} words exact")
+    segments = []
+    for path in images:
+        print(f"Reading {path.name} ...")
+        seg = build_segment(path, args.device)
+        s = seg["stats"]
+        print(f"  {len(seg['regions'])} regions in "
+              f"{seg['result']['timing']['inference_seconds']:.2f}s"
+              + (f", accuracy {s['accuracy']:.1%}, "
+                 f"{s['words_exact']}/{s['words_total']} words exact" if s else ""))
+        ph, pw = seg["page"].shape[:2]
+        scale = min(STAGE[2] / pw, STAGE[3] / ph)
+        dw, dh = int(pw * scale), int(ph * scale)
+        seg["scale"] = scale
+        seg["dx"] = STAGE[0] + (STAGE[2] - dw) // 2
+        seg["dy"] = STAGE[1] + (STAGE[3] - dh) // 2
+        seg["dw"], seg["dh"] = dw, dh
+        seg["small"] = Image.fromarray(
+            cv2.resize(seg["page"], (dw, dh), interpolation=cv2.INTER_AREA)
+        )
+        segments.append(seg)
 
-    # Which regions do not appear on the page. Marked in the panel so
-    # the video never implies a clean sweep it did not get.
-    #
-    # Tested by containment, not by zipping the two word lists: one
-    # dropped word shifts every pair after it, which silently passed a
-    # misread ("al-baab" read as "al-aab") as correct in the first cut
-    # of this video.
-    wrong = set()
-    if expected:
-        from phonics_ocr import postprocessing as _pp
+    pw_panel = W - PANEL_X - 40
 
-        reference = _pp.normalise_text(" ".join(expected))
-        for region in result["regions"]:
-            text = region["text_raw"]
-            if text.strip() and _pp.normalise_text(text) not in reference:
-                wrong.add(text)
-
-    page = cv2.cvtColor(cv2.imread(str(args.image)), cv2.COLOR_BGR2RGB)
-    ph, pw = page.shape[:2]
-
-    stage = (40, 96, 1000, 940)          # x, y, w, h
-    scale = min(stage[2] / pw, stage[3] / ph)
-    dw, dh = int(pw * scale), int(ph * scale)
-    dx = stage[0] + (stage[2] - dw) // 2
-    dy = stage[1] + (stage[3] - dh) // 2
-    page_small = Image.fromarray(cv2.resize(page, (dw, dh), interpolation=cv2.INTER_AREA))
-
-    def box_on_canvas(region: Dict[str, Any]) -> Tuple[int, int, int, int]:
-        x0, y0, x1, y1 = region["bbox"]
-        return (int(dx + x0 * scale), int(dy + y0 * scale),
-                int(dx + x1 * scale), int(dy + y1 * scale))
-
-    px = 1060
-    pw_panel = W - px - 40
-
-    def frame(phase: str, t: float, n_boxes: int, n_rows: int, scan: float) -> Image.Image:
+    def frame(seg, phase: str, n_boxes: int, n_rows: int, scan: float) -> Image.Image:
+        regions, stats = seg["regions"], seg["stats"]
+        res = seg["result"]
+        rtl = seg["lang"] != "en"
         img = Image.new("RGB", (W, H), BG)
         d = ImageDraw.Draw(img)
 
@@ -183,7 +203,14 @@ def main() -> int:
         d.line([(0, 72), (W, 72)], fill=LINE)
         d.ellipse([28, 20, 60, 52], fill=ACCENT)
         d.text((76, 18), sh("موشور الصوتيات"), font=f_title, fill=INK)
-        d.text((76, 48), "Phonics Prism  ·  Arabic OCR  ·  offline", font=f_sub, fill=MUTED)
+        d.text((76, 48), "Phonics Prism  ·  reads Arabic and English  ·  offline",
+               font=f_sub, fill=MUTED)
+
+        tag = {"ar": "عربي", "en": "English"}[seg["lang"]]
+        tagw = d.textlength(sh(tag), font=f_ui)
+        d.rounded_rectangle([W - tagw - 300, 24, W - 240, 54], 14,
+                            fill=(18, 27, 38), outline=LINE)
+        d.text((W - tagw - 270, 29), sh(tag), font=f_ui, fill=MUTED)
 
         label = {"idle": "جاهز", "scan": "جارٍ التحليل", "done": "اكتملت القراءة"}[phase]
         col = {"idle": MUTED, "scan": WARN, "done": OK}[phase]
@@ -192,73 +219,89 @@ def main() -> int:
                             fill=(18, 27, 38), outline=col)
         d.text((W - tw - 60, 29), sh(label), font=f_ui, fill=col)
 
-        d.rounded_rectangle([stage[0] - 10, stage[1] - 10,
-                             stage[0] + stage[2] + 10, stage[1] + stage[3] + 10],
+        d.rounded_rectangle([STAGE[0] - 10, STAGE[1] - 10,
+                             STAGE[0] + STAGE[2] + 10, STAGE[1] + STAGE[3] + 10],
                             10, fill=(5, 7, 11), outline=LINE)
-        img.paste(page_small, (dx, dy))
+        img.paste(seg["small"], (seg["dx"], seg["dy"]))
 
         if phase == "scan":
-            y = int(dy + scan * dh)
-            d.line([(dx, y), (dx + dw, y)], fill=ACCENT, width=3)
-            d.rectangle([dx, dy, dx + dw, y], fill=None, outline=None)
+            y = int(seg["dy"] + scan * seg["dh"])
+            d.line([(seg["dx"], y), (seg["dx"] + seg["dw"], y)], fill=ACCENT, width=3)
 
-        for i, region in enumerate(regions[:n_boxes]):
-            x0, y0, x1, y1 = box_on_canvas(region)
+        for region in regions[:n_boxes]:
+            x0, y0, x1, y1 = region["bbox"]
             s = region["rec_score"]
-            c = OK if s >= 0.9 else (WARN if s >= 0.7 else BAD)
-            d.rectangle([x0, y0, x1, y1], outline=c, width=3)
+            c = BAD if region["text_raw"] in stats.get("wrong", ()) else (
+                OK if s >= 0.9 else WARN)
+            d.rectangle([int(seg["dx"] + x0 * seg["scale"]),
+                         int(seg["dy"] + y0 * seg["scale"]),
+                         int(seg["dx"] + x1 * seg["scale"]),
+                         int(seg["dy"] + y1 * seg["scale"])], outline=c, width=3)
 
-        d.rounded_rectangle([px, 96, px + pw_panel, 1040], 12,
+        d.rounded_rectangle([PANEL_X, 96, PANEL_X + pw_panel, 1020], 12,
                             fill=PANEL, outline=LINE)
-        d.text((px + pw_panel - 24, 118), sh("النتيجة"), font=f_ui, fill=INK, anchor="ra")
-        d.line([(px + 16, 156), (px + pw_panel - 16, 156)], fill=LINE)
+        anchor = "ra" if rtl else "la"
+        hx = PANEL_X + pw_panel - 24 if rtl else PANEL_X + 24
+        d.text((hx, 118), sh("النتيجة") if rtl else "Result",
+               font=f_ui, fill=INK, anchor=anchor)
+        d.line([(PANEL_X + 16, 156), (PANEL_X + pw_panel - 16, 156)], fill=LINE)
 
         cells = [
-            ("سطور", str(len(regions)) if n_rows else "—"),
-            ("تشكيل", str(stats.get("marks_found", "—")) if n_rows else "—"),
-            ("الدقة", f"{stats['accuracy']:.0%}" if (n_rows and stats) else "—"),
+            ("سطور" if rtl else "lines", str(len(regions)) if n_rows else "—"),
+            ("تشكيل" if rtl else "words",
+             str(stats.get("marks_found", "—")) if (n_rows and rtl)
+             else (str(stats.get("words_exact", "—")) if n_rows else "—")),
+            ("الدقة" if rtl else "accuracy",
+             f"{stats['accuracy']:.0%}" if (n_rows and stats) else "—"),
         ]
         cw = (pw_panel - 32) // 3
         for i, (k, v) in enumerate(cells):
-            cx = px + 16 + i * cw
+            cx = PANEL_X + 16 + i * cw
             d.rounded_rectangle([cx, 172, cx + cw - 8, 254], 8, fill=PANEL2)
             d.text((cx + cw // 2 - 4, 196), v, font=f_num, fill=INK, anchor="mm")
-            d.text((cx + cw // 2 - 4, 234), sh(k), font=f_lbl, fill=MUTED, anchor="mm")
+            d.text((cx + cw // 2 - 4, 234), sh(k) if rtl else k,
+                   font=f_lbl, fill=MUTED, anchor="mm")
 
         y = 278
-        for i, region in enumerate(regions[:n_rows]):
-            if y > 980:
+        for region in regions[:n_rows]:
+            if y > 950:
                 break
             s = region["rec_score"]
             txt = region["text_raw"]
-            bad = txt in wrong
+            bad = txt in stats.get("wrong", ())
             c = BAD if bad else (OK if s >= 0.9 else WARN)
             rh = 64
-            d.rounded_rectangle([px + 16, y, px + pw_panel - 16, y + rh], 9,
+            d.rounded_rectangle([PANEL_X + 16, y, PANEL_X + pw_panel - 16, y + rh], 9,
                                 fill=PANEL2, outline=LINE)
-            d.rounded_rectangle([px + 24, y + 7, px + 76, y + 28], 5,
-                                fill=(16, 36, 22) if not bad else (42, 19, 19))
-            d.text((px + 50, y + 17), f"{s:.2f}", font=f_lbl, fill=c, anchor="mm")
+            d.rounded_rectangle([PANEL_X + 24, y + 7, PANEL_X + 76, y + 28], 5,
+                                fill=(42, 19, 19) if bad else (16, 36, 22))
+            d.text((PANEL_X + 50, y + 17), f"{s:.2f}", font=f_lbl, fill=c, anchor="mm")
             if bad:
-                d.text((px + 86, y + 10), sh("يخالف الصفحة"), font=f_lbl, fill=BAD)
-            d.text((px + pw_panel - 32, y + 40), sh(txt), font=f_ar,
-                   fill=INK, anchor="rm")
+                d.text((PANEL_X + 86, y + 10),
+                       sh("يخالف الصفحة") if rtl else "differs from page",
+                       font=f_lbl, fill=BAD)
+            if rtl:
+                d.text((PANEL_X + pw_panel - 32, y + 40), sh(txt),
+                       font=f_ar, fill=INK, anchor="rm")
+            else:
+                d.text((PANEL_X + 32, y + 40), txt, font=f_ar, fill=INK, anchor="lm")
             y += rh + 6
 
-        foot = (f"{result['timing']['inference_seconds']:.2f}s  ·  "
-                f"{result['device_used']}  ·  {result['config']['lang']}  ·  "
-                f"{result.get('weights_used', 'arabic_mixed_rec_r3')}")
-        d.text((px + 24, 1008), foot, font=f_lbl, fill=MUTED)
+        foot = (f"{res['timing']['inference_seconds']:.2f}s  ·  "
+                f"{res['device_used']}  ·  {seg['lang']}  ·  "
+                f"{seg['meta'].get('font', '')}")
+        d.text((PANEL_X + 24, 1034), foot, font=f_lbl, fill=MUTED)
 
         if phase == "done" and stats:
-            note = (f"الكلمات المطابقة تمامًا: {stats['words_exact']} من "
-                    f"{stats['words_total']}  ·  الحركات: "
-                    f"{stats['marks_found']} من {stats['marks_total']}")
-            d.text((stage[0], 1052), sh(note), font=f_ar_s, fill=MUTED)
-        else:
-            d.text((stage[0], 1052),
-                   sh("صفحة مُولَّدة، نصها الصحيح معروف — لتقاس النتيجة لا لتُستحسن"),
-                   font=f_ar_s, fill=MUTED)
+            if rtl:
+                note = (f"الكلمات المطابقة تمامًا: {stats['words_exact']} من "
+                        f"{stats['words_total']}  ·  الحركات: "
+                        f"{stats['marks_found']} من {stats['marks_total']}")
+            else:
+                note = (f"exact words: {stats['words_exact']} of "
+                        f"{stats['words_total']}")
+            d.text((STAGE[0], 1044), sh(note) if rtl else note,
+                   font=f_ui, fill=MUTED)
         return img
 
     frames_dir = PROJECT_ROOT / "data/results/demo/frames"
@@ -266,24 +309,36 @@ def main() -> int:
         shutil.rmtree(frames_dir)
     frames_dir.mkdir(parents=True, exist_ok=True)
 
-    plan: List[Tuple[str, float, int, int, float]] = []
-    for i in range(int(1.2 * FPS)):
-        plan.append(("idle", i / FPS, 0, 0, 0.0))
-    scan_n = int(1.8 * FPS)
-    for i in range(scan_n):
-        plan.append(("scan", i / FPS, 0, 0, i / scan_n))
-    per = max(1, int(0.42 * FPS))
-    for k in range(1, len(regions) + 1):
-        for i in range(per):
-            plan.append(("done", 0.0, k, k, 0.0))
-    for i in range(int(3.5 * FPS)):
-        plan.append(("done", 0.0, len(regions), len(regions), 0.0))
+    n = 0
+    total = 0
+    for seg in segments:
+        regions = seg["regions"]
+        plan: List[Tuple[str, int, int, float]] = []
+        plan += [("idle", 0, 0, 0.0)] * int(1.0 * FPS)
+        scan_n = int(1.6 * FPS)
+        plan += [("scan", 0, 0, i / scan_n) for i in range(scan_n)]
+        per = max(1, int(0.40 * FPS))
+        for k in range(1, len(regions) + 1):
+            plan += [("done", k, k, 0.0)] * per
+        plan += [("done", len(regions), len(regions), 0.0)] * int(3.0 * FPS)
+        total += len(plan)
 
-    print(f"Rendering {len(plan)} frames ...")
-    for n, (phase, t, nb, nr, sc) in enumerate(plan):
-        frame(phase, t, nb, nr, sc).save(frames_dir / f"f{n:05d}.png")
-        if n % 60 == 0:
-            print(f"  {n}/{len(plan)}")
+    print(f"Rendering {total} frames ...")
+    for seg in segments:
+        regions = seg["regions"]
+        plan = []
+        plan += [("idle", 0, 0, 0.0)] * int(1.0 * FPS)
+        scan_n = int(1.6 * FPS)
+        plan += [("scan", 0, 0, i / scan_n) for i in range(scan_n)]
+        per = max(1, int(0.40 * FPS))
+        for k in range(1, len(regions) + 1):
+            plan += [("done", k, k, 0.0)] * per
+        plan += [("done", len(regions), len(regions), 0.0)] * int(3.0 * FPS)
+        for phase, nb, nr, sc in plan:
+            frame(seg, phase, nb, nr, sc).save(frames_dir / f"f{n:05d}.png")
+            n += 1
+            if n % 90 == 0:
+                print(f"  {n}/{total}")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [ffmpeg, "-y", "-framerate", str(FPS),
@@ -299,12 +354,13 @@ def main() -> int:
     if not args.keep_frames:
         shutil.rmtree(frames_dir)
 
-    size_mb = args.out.stat().st_size / 1e6
-    print(f"\nwrote {args.out}  ({size_mb:.1f} MB, {len(plan)/FPS:.1f}s)")
-    if stats:
-        print(f"  accuracy shown: {stats['accuracy']:.1%}  "
-              f"words {stats['words_exact']}/{stats['words_total']}  "
-              f"marks {stats['marks_found']}/{stats['marks_total']}")
+    print(f"\nwrote {args.out}  "
+          f"({args.out.stat().st_size / 1e6:.1f} MB, {n / FPS:.1f}s)")
+    for seg in segments:
+        s = seg["stats"]
+        if s:
+            print(f"  {seg['image'].name:<20} accuracy {s['accuracy']:.1%}  "
+                  f"words {s['words_exact']}/{s['words_total']}")
     return 0
 
 

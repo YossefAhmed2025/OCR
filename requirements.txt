@@ -20,5 +20,14 @@ Pillow>=10.0
 arabic-reshaper>=3.0.0
 python-bidi>=0.4.2
 
+# Typesetting-grade Arabic rendering (phonics_ocr.shaping). HarfBuzz
+# reads the font's GSUB/GPOS tables, so a harakah lands where the type
+# designer put it; FreeType rasterises the glyph ids it returns.
+# arabic-reshaper cannot do this -- it emits presentation forms, which
+# carry a letter's joined shape but no mark positioning, and every
+# Naskh face drew the marks detached under it.
+uharfbuzz>=0.39
+freetype-py>=2.4
+
 # Tests.
 pytest>=8.0
