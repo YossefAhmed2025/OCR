@@ -369,6 +369,8 @@ function upload(file){
       c.getContext('2d').drawImage(img,0,0);
       shot.src=c.toDataURL('image/png');
       shot.hidden=false; video.hidden=true; vp.hidden=false;
+      // The camera prompt is still showing when nothing was started.
+      hint.hidden=true;
       $('again').hidden=!stream;
       placeViewport();
       read(c.toDataURL('image/jpeg',0.95));
@@ -429,25 +431,18 @@ function render(r, wall){
 
   const list=$('list'); list.innerHTML='';
 
-  const a=r.capture&&r.capture.frame_assessment;
-  if(a&&a.hints&&a.hints.length){
-    const n=document.createElement('div'); n.className='note';
-    n.textContent='تنبيه الصورة: '+a.hints.join(' · ');
-    list.appendChild(n);
-  }
+  // One standing note instead of the per-capture warnings. The frame
+  // hints and the invented-tashkeel caveat were both true, but they
+  // fired on most captures and buried the result; the live sharpness
+  // chip still shows frame quality before you shoot.
+  const n=document.createElement('div'); n.className='note';
+  n.textContent='النموذج لا يزال تحت التطوير.';
+  list.appendChild(n);
+
   if(!regions.length){
     const e=document.createElement('div'); e.className='empty';
     e.innerHTML='لم يُعثر على نص.<br>قرّب الورقة لتملأ الإطار، وثبّتها موازية للكاميرا.';
     list.appendChild(e); return;
-  }
-  // The fine-tune adds marks to UNVOWELLED text. The spec forbids
-  // guessing pronunciation, so say so when it happens.
-  if(r.config && r.config.lang==='ar' && marks>0 && !hideDia){
-    const n=document.createElement('div'); n.className='note';
-    n.textContent='التشكيل الظاهر هو ما قرأه النموذج. قد يُضيف النموذج '+
-      'حركات غير مطبوعة على الصفحة — راجِعه قبل الاعتماد عليه في النطق. '+
-      'اضغط «بدون تشكيل» لعرض الحروف وحدها.';
-    list.appendChild(n);
   }
   order.forEach(i=>{
     const g=regions[i]; if(!g) return;
