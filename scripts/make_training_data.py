@@ -114,7 +114,24 @@ def main() -> int:
         return 1
     rng.shuffle(fonts)
     fonts = fonts[: args.max_fonts]
-    print(f"  using {len(fonts)} font(s)")
+
+    # Printed Arabic is Naskh. Sampling the discovered fonts uniformly
+    # trained the first model mostly on screen faces, and it then read
+    # Naskh 5.5x worse than the faces it knew -- see PRINT_NASKH_WEIGHTS.
+    discovered = len(fonts)
+    try:
+        fonts, font_weights = synth.weight_fonts(fonts)
+    except synth.SynthError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    dropped = discovered - len(fonts)
+    total_weight = sum(font_weights)
+    naskh_share = sum(
+        w for f, w in zip(fonts, font_weights)
+        if f.name in synth.PRINT_NASKH_WEIGHTS
+    ) / total_weight
+    print(f"  using {len(fonts)} font(s); dropped {dropped} not used in print")
+    print(f"  expected Naskh share of samples: {naskh_share:.0%}")
 
     base_charset: List[str] = []
     if args.warm_start_charset and Path(args.warm_start_charset).is_dir():
@@ -147,7 +164,7 @@ def main() -> int:
             max_words=args.max_words,
             real_word_prob=args.real_word_prob,
         )
-        font = rng.choice(fonts)
+        font = rng.choices(fonts, weights=font_weights, k=1)[0]
         try:
             image, visual_label = synth.render_line(text, font, config, rng)
         except synth.SynthError as exc:
@@ -225,6 +242,13 @@ def main() -> int:
         "image_height": args.height,
         "n_fonts": len(fonts),
         "fonts_top10": font_usage.most_common(10),
+        "fonts_dropped_not_print": dropped,
+        "naskh_weighted_share": round(naskh_share, 4),
+        "naskh_actual_share": round(
+            sum(n for f, n in font_usage.items() if f in synth.PRINT_NASKH_WEIGHTS)
+            / max(1, sum(font_usage.values())),
+            4,
+        ),
         "render_failures": failures,
         "charset_size": len(charset),
         "charset_warm_started_from": (

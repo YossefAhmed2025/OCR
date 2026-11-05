@@ -54,8 +54,19 @@ RECOGNITION_MODELS: Final[Dict[str, str]] = {
 #: the stock model's Latin ability -- it reads "The boy wrote the
 #: lesson" as هَءَءمًا هَطًَأُ -- so English must keep using
 #: en_PP-OCRv5_mobile_rec.
+#: ``arabic_mixed_rec_r3`` is that model trained a further 18 epochs on
+#: a dataset where 30% of the lines carry no marks at all. The earlier
+#: build had only ever seen vowelled text, so it added marks to bare
+#: print -- 8 of them on test_arabic_plain.png, which the spec (p.10)
+#: forbids, because a wrong mark is a wrong pronunciation. Measured
+#: against it: invented marks on bare print 8 -> 0; diacritic recall
+#: unchanged (0.453 on the labelled photo, 1.000 on the smoke set);
+#: CER 0.794 -> 0.458 on the 4-image smoke set but 0.239 -> 0.265 on
+#: the one labelled photograph. That last number is 4 characters out
+#: of 155 on a single page -- too small to read as a regression, and
+#: the reason the accuracy claim still needs 20-50 real pages.
 FINETUNED_MODELS: Final[Dict[str, str]] = {
-    "ar": "arabic_vowelled_rec_final",
+    "ar": "arabic_mixed_rec_r3",
 }
 
 #: PaddleOCR's own ``lang`` code for each of our language keys.

@@ -44,6 +44,10 @@ from .utils import get_logger
 
 LOGGER = get_logger(__name__)
 
+#: Naskh faces shipped with the project, under their own licences
+#: (see ``assets/fonts/OFL-*.txt``). Searched before the system dirs.
+PROJECT_FONT_DIR: Path = Path(__file__).resolve().parents[2] / "assets" / "fonts"
+
 # ---------------------------------------------------------------------
 # Character inventory
 # ---------------------------------------------------------------------
@@ -373,11 +377,16 @@ def find_vowel_capable_fonts(directories: Optional[Iterable[Path]] = None) -> Li
     if directories is None:
         import platform
 
-        directories = (
+        system_dirs = (
             [Path(r"C:\Windows\Fonts")]
             if platform.system() == "Windows"
             else [Path("/usr/share/fonts"), Path.home() / ".fonts"]
         )
+        # Fonts shipped with the project come first. Windows carries
+        # only five Naskh faces that render the presentation forms the
+        # renderer emits, which is too narrow a sample of printed
+        # Arabic to train on.
+        directories = [PROJECT_FONT_DIR] + system_dirs
 
     found: List[Path] = []
     for directory in directories:
@@ -402,6 +411,87 @@ def find_vowel_capable_fonts(directories: Optional[Iterable[Path]] = None) -> Li
             if font_covers_shaped(path):
                 found.append(path)
     return found
+
+
+#: Typefaces printed Arabic is actually set in -- Naskh and its
+#: descendants. The first fine-tune drew its 26 fonts uniformly, so
+#: screen faces and even monospaced ones carried the same weight as
+#: Naskh. Measured afterwards on identical text, that model scored
+#: CER 0.054 on the screen faces it had seen most and 0.299 on Naskh:
+#: 5.5x worse on the only kind of type a printed page uses, and the
+#: single largest known error source in the pipeline. Traditional
+#: Arabic, the commonest Arabic book face, scored 0.554 alone.
+#:
+#: Weights are relative sampling odds, not counts.
+PRINT_NASKH_WEIGHTS: Dict[str, float] = {
+    "Amiri-Regular.ttf": 6.0,  # shipped in assets/fonts (OFL)
+    "Amiri-Bold.ttf": 3.0,
+    "trado.ttf": 6.0,      # Traditional Arabic -- the book default
+    "tradbdo.ttf": 4.0,
+    "arabtype.ttf": 5.0,   # Arabic Typesetting
+    "simpo.ttf": 5.0,      # Simplified Arabic -- common in Egypt
+    "simpbdo.ttf": 3.0,
+    "andlso.ttf": 5.0,     # Andalus
+    "aldhabi.ttf": 3.0,    # Aldhabi
+    "majalla.ttf": 3.0,    # Sakkal Majalla
+    "majallab.ttf": 2.0,
+}
+
+#: Faces that never set an Arabic book. Monospaced Arabic does not
+#: exist in print, and the Latin-first families carry Arabic only as a
+#: fallback. Training on them spends model capacity on letterforms the
+#: camera will never be pointed at.
+NON_PRINT_FONTS: frozenset = frozenset(
+    {
+        "cour.ttf",
+        "courbd.ttf",
+        "DejaVuSansMono.ttf",
+        "simpfxo.ttf",        # Simplified Arabic *Fixed* -- monospaced
+        "micross.ttf",
+        "msuighub.ttf",       # Uighur, not Arabic typesetting
+        "msuighur.ttf",
+        "UrdType.ttf",        # Urdu Nastaliq
+        "UrdTypeb.ttf",
+        "Lalezar-Regular.ttf",  # display face, not body text
+    }
+)
+
+#: Everything else -- screen faces a page might still be printed in.
+#: Kept, but outweighed.
+DEFAULT_FONT_WEIGHT: float = 1.0
+
+
+def weight_fonts(
+    fonts: Sequence[Path],
+    naskh_weights: Optional[Dict[str, float]] = None,
+    excluded: Optional[Iterable[str]] = None,
+) -> Tuple[List[Path], List[float]]:
+    """Drop faces print never uses, and weight the rest toward Naskh.
+
+    Returns the surviving fonts and their sampling weights, ready for
+    ``random.Random.choices``. Exclusion is by file name, so a machine
+    missing a given font simply contributes fewer entries rather than
+    failing.
+
+    Raising a weight is not the same as adding data: the dataset size
+    is unchanged, so Naskh gains samples that the screen faces lose.
+    """
+    table = PRINT_NASKH_WEIGHTS if naskh_weights is None else naskh_weights
+    skip = NON_PRINT_FONTS if excluded is None else frozenset(excluded)
+
+    kept: List[Path] = []
+    weights: List[float] = []
+    for path in fonts:
+        if path.name in skip:
+            continue
+        kept.append(path)
+        weights.append(table.get(path.name, DEFAULT_FONT_WEIGHT))
+    if not kept:
+        raise SynthError(
+            "every candidate font was excluded; check NON_PRINT_FONTS "
+            "against the fonts installed on this machine"
+        )
+    return kept, weights
 
 
 # ---------------------------------------------------------------------

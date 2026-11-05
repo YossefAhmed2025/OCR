@@ -160,10 +160,77 @@ change which weights are used.
 
 ---
 
+## 4b. The typeface is the dominant error source
+
+Measured 2026-11-05, against the `arabic_mixed_rec_r3` fine-tune.
+
+The fine-tuned model read a photographed book page at CER 0.265, and
+stripping every diacritic from both sides only brought that to 0.209 —
+so the base **letters** were wrong, not just the marks. Detected line
+height was 131 px (median), which is far above any resolution floor,
+so the image had the pixels.
+
+Three candidate causes were tested.
+
+**A bigger detector does not help.** `PP-OCRv5_server_det` (18x the
+mobile detector) scored identical CER (0.2645), worse WER (0.864 vs
+0.773) and much worse diacritic recall (0.250 vs 0.453). It split the
+page into 21 regions instead of 16; the extra splits fell inside
+words. Detection capacity is not the constraint.
+
+**The typeface is.** The same sentence was rendered in eight faces at
+one size with no degradation, and read back:
+
+| face | kind | CER | letters | dia-recall |
+|---|---|---|---|---|
+| Tahoma | screen | 0.000 | 0.000 | 1.000 |
+| Sakkal Majalla | screen | 0.018 | 0.000 | 0.957 |
+| Arial | screen | 0.036 | 0.030 | 0.217 |
+| Andalus | Naskh | 0.071 | 0.061 | 0.217 |
+| Segoe UI | screen | 0.161 | 0.152 | 0.217 |
+| Simplified Arabic | Naskh | 0.196 | 0.273 | 0.609 |
+| Arabic Typesetting | Naskh | 0.375 | 0.333 | 0.304 |
+| Traditional Arabic | Naskh | 0.554 | 0.606 | 0.130 |
+| **mean, Naskh** | | **0.299** | 0.318 | 0.315 |
+| **mean, screen** | | **0.054** | 0.045 | 0.598 |
+
+**5.5x worse on the typefaces printed Arabic actually uses.** The
+cause is in the generator, not the model: `make_training_data.py` drew
+its 26 discovered fonts uniformly, so Arial, Segoe UI, Courier New and
+DejaVu Sans **Mono** each received about as many samples as
+Traditional Arabic. Monospaced Arabic does not occur in print at all.
+
+Fixed by `synth.weight_fonts`: six faces print never uses are dropped,
+and Naskh is weighted from a 15% share of samples to 66%. Amiri
+(SIL OFL, in `assets/fonts/`) was added because Windows ships only
+five Naskh faces that render the presentation forms the renderer
+emits.
+
+Two caveats on the table above:
+
+- A first version of this measurement joined regions in **detection**
+  order and reported Tahoma at CER 0.661. That was the ordering bug
+  from `compare_models.py` reappearing in a throwaway script. The
+  numbers here sort by reading order.
+- `font_covers_shaped` rejects Simplified Arabic, Arabic Typesetting
+  and Aldhabi: they render the reshaper's presentation-form codepoints
+  as tofu (verified visually). This is a limitation of rendering via
+  `arabic_reshaper` rather than HarfBuzz — Pillow here has no raqm
+  support. Those three faces appear in the table only because the
+  probe rendered them directly. Adding `uharfbuzz` shaping would
+  unlock them and is the obvious next improvement to the generator.
+
+---
+
 ## 5. What to do next
 
 In priority order:
 
+0. **Shape with HarfBuzz instead of `arabic_reshaper`.** See 4b: three
+   of the best Naskh faces are unusable because the renderer emits
+   presentation-form codepoints they do not carry. `uharfbuzz` would
+   let the font's own OpenType tables do the shaping, which is also
+   how a real typesetter produces the page being photographed.
 1. **Replace these synthetic images with photographed pages.** Nothing
    here generalises to camera input. This is the single highest-value
    next step.

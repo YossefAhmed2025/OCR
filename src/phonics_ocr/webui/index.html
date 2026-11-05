@@ -42,8 +42,32 @@
     position:relative; background:#05070b; display:flex;
     align-items:center; justify-content:center; overflow:hidden; min-height:0;
   }
-  .stage video,.stage img{max-width:100%;max-height:100%;object-fit:contain;display:block}
   .stage .hint{position:absolute;color:var(--muted);font-size:14px;text-align:center;padding:20px}
+
+  /* The viewport IS the page aperture: an A5-shaped box with
+     overflow:hidden. The video inside is object-fit:cover, so the
+     browser scales the frame up and clips everything outside the A5
+     rectangle -- the room, and whoever is sitting behind the page, is
+     never drawn at all. grab() crops the same rectangle, so what you
+     see is exactly what the model gets. Its pixel size is set from JS
+     rather than CSS aspect-ratio, because the box is over-constrained
+     (height + ratio + both maxima) and browsers resolve that
+     inconsistently. */
+  .viewport{
+    position:relative; overflow:hidden; background:#05070b; flex:none;
+    border-radius:7px; outline:1px solid rgba(79,140,255,.45);
+    box-shadow:0 14px 48px rgba(0,0,0,.65);
+  }
+  .viewport video,.viewport img{
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+  }
+  .viewport video{object-fit:cover}
+  .viewport img{object-fit:contain}
+  .viewport b{position:absolute;width:20px;height:20px;border:2px solid rgba(79,140,255,.75)}
+  .viewport .k1{top:6px;left:6px;border-right:0;border-bottom:0}
+  .viewport .k2{top:6px;right:6px;border-left:0;border-bottom:0}
+  .viewport .k3{bottom:6px;left:6px;border-right:0;border-top:0}
+  .viewport .k4{bottom:6px;right:6px;border-left:0;border-top:0}
 
   .hud{
     position:absolute; inset-inline-start:12px; top:12px;
@@ -55,6 +79,7 @@
     font-variant-numeric:tabular-nums;
   }
   .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+
 
   .controls{
     position:absolute; bottom:0; inset-inline:0; padding:14px;
@@ -76,9 +101,15 @@
     background:var(--panel);border-inline-start:1px solid var(--line);
     display:flex;flex-direction:column;min-height:0;
   }
-  .head{padding:14px 16px;border-bottom:1px solid var(--line);flex:none}
+  .head{
+    padding:14px 16px;border-bottom:1px solid var(--line);flex:none;
+    display:flex;align-items:center;gap:10px;
+  }
+  .head .grow{flex:1;min-width:0}
   .head h2{margin:0;font-size:14px;font-weight:600}
   .head .sub{font-size:11px;color:var(--muted);margin-top:3px}
+  button.mini{font-size:11px;padding:5px 10px;border-radius:7px;flex:none}
+  button.mini.on{color:var(--accent);border-color:#3f6fd0;background:#121c2e}
 
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);flex:none}
   .stat{background:var(--panel);padding:11px 8px;text-align:center}
@@ -127,10 +158,14 @@
 
 <main>
   <section class="stage">
-    <video id="video" autoplay playsinline muted></video>
-    <img id="shot" alt="" hidden>
+    <div class="viewport" id="viewport" hidden>
+      <video id="video" autoplay playsinline muted></video>
+      <img id="shot" alt="" hidden>
+      <b class="k1"></b><b class="k2"></b><b class="k3"></b><b class="k4"></b>
+    </div>
     <div class="hint" id="hint">اضغط «تشغيل الكاميرا» للبدء</div>
     <div class="hud" id="hud" hidden>
+      <span class="chip" id="chipWin">A5</span>
       <span class="chip" id="chipRes">—</span>
       <span class="chip" id="chipSharp">—</span>
     </div>
@@ -141,6 +176,7 @@
         <option value="mixed">مختلط (تجريبي)</option>
       </select>
       <select id="cam" title="الكاميرا" hidden></select>
+      <button id="win" class="on" title="اقصر البث على مقاس A5">نافذة A5</button>
       <button id="start">تشغيل الكاميرا</button>
       <button id="snap" class="primary" disabled>التقاط وقراءة</button>
       <button id="again" hidden>رجوع للبث</button>
@@ -150,8 +186,11 @@
 
   <aside>
     <div class="head">
-      <h2>النتيجة</h2>
-      <div class="sub" id="resSub">لم يتم التقاط صورة بعد</div>
+      <div class="grow">
+        <h2>النتيجة</h2>
+        <div class="sub" id="resSub">لم يتم التقاط صورة بعد</div>
+      </div>
+      <button id="dia" class="mini" title="إخفاء الحركات من العرض فقط">بدون تشكيل</button>
     </div>
     <div class="stats">
       <div class="stat"><div class="v" id="sLines">—</div><div class="k">سطور</div></div>
@@ -172,10 +211,43 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const video=$('video'), shot=$('shot'), hint=$('hint'), hud=$('hud');
-let stream=null, lastFrame=null;
+const video=$('video'), shot=$('shot'), hint=$('hint'), hud=$('hud'), vp=$('viewport');
+let stream=null, lastFrame=null, useWindow=true, hideDia=false;
+
+// A5 portrait, 148 x 210 mm.
+const A5_W_MM=148, A5_H_MM=210, A5_AR=A5_W_MM/A5_H_MM;
 
 function setChip(el, text, cls){ el.textContent=text; el.className='chip'+(cls?' '+cls:''); }
+
+// Crop rectangle in VIDEO pixel coordinates -- the same rectangle
+// object-fit:cover shows in the viewport: the largest A5-shaped region
+// that fits the sensor frame, centred. No margin is left over, so the
+// crop uses the full sensor height on a landscape camera.
+function cropRect(){
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(!vw||!vh) return null;
+  if(!useWindow) return {x:0,y:0,w:vw,h:vh};
+  let w, h;
+  if(vw/vh > A5_AR){ h=vh; w=vh*A5_AR; } else { w=vw; h=vw/A5_AR; }
+  w=Math.round(w); h=Math.round(h);
+  return {x:Math.round((vw-w)/2), y:Math.round((vh-h)/2), w:w, h:h};
+}
+
+// Size the viewport in pixels so its shape matches the crop exactly.
+function placeViewport(){
+  if(!stream){ vp.hidden=true; return; }
+  const s=vp.parentElement.getBoundingClientRect();
+  const availW=Math.max(80, s.width-32), availH=Math.max(80, s.height-96);
+  const ar = useWindow
+    ? A5_AR
+    : (video.videoWidth ? video.videoWidth/video.videoHeight : 4/3);
+  let h=availH, w=h*ar;
+  if(w>availW){ w=availW; h=w/ar; }
+  vp.style.width=Math.round(w)+'px';
+  vp.style.height=Math.round(h)+'px';
+  vp.hidden=false;
+}
+window.addEventListener('resize', placeViewport);
 
 async function listCams(){
   try{
@@ -206,32 +278,43 @@ async function start(){
     return;
   }
   video.srcObject=stream; video.hidden=false; shot.hidden=true;
-  hint.hidden=true; hud.hidden=false;
+  hint.hidden=true; hud.hidden=false; placeViewport();
   $('snap').disabled=false; $('stop').disabled=false; $('start').textContent='إعادة التشغيل';
   await listCams();
-  video.onloadedmetadata=()=>setChip($('chipRes'), video.videoWidth+'×'+video.videoHeight);
+  video.onloadedmetadata=()=>{ showRes(); placeViewport(); };
   tick();
+}
+
+function showRes(){
+  const c=cropRect(); if(!c) return;
+  setChip($('chipWin'), useWindow ? 'A5 · 148 × 210 مم' : 'الإطار كامل',
+          useWindow ? 'ok' : 'warn');
+  setChip($('chipRes'), useWindow
+    ? video.videoWidth+'×'+video.videoHeight+' → '+c.w+'×'+c.h
+    : video.videoWidth+'×'+video.videoHeight);
 }
 
 function stop(){
   if(stream) stream.getTracks().forEach(t=>t.stop());
-  stream=null; video.srcObject=null; hud.hidden=true;
+  stream=null; video.srcObject=null; hud.hidden=true; vp.hidden=true;
   $('snap').disabled=true; $('stop').disabled=true;
   hint.hidden=false; hint.textContent='الكاميرا متوقفة';
 }
 
-// Live sharpness, measured on a small grayscale centre crop with a
-// Laplacian-style kernel. Measured on real captures: below ~150 the
-// recogniser loses diacritics, so the chip warns before you shoot
-// rather than after.
+// Live sharpness, measured with a Laplacian-style kernel on a small
+// grayscale sample of the reading window -- the same pixels that will
+// be sent, so the number means something. Measured on real captures:
+// below ~150 the recogniser loses diacritics, so the chip warns before
+// you shoot rather than after.
 function tick(){
   if(!stream) return;
-  if(video.videoWidth){
+  const r=cropRect();
+  if(r){
+    placeViewport();
     const w=220,h=160,c=document.createElement('canvas');
     c.width=w;c.height=h;
     const g=c.getContext('2d',{willReadFrequently:true});
-    const sx=(video.videoWidth-video.videoWidth*0.5)/2, sy=(video.videoHeight-video.videoHeight*0.5)/2;
-    g.drawImage(video,sx,sy,video.videoWidth*0.5,video.videoHeight*0.5,0,0,w,h);
+    g.drawImage(video, r.x,r.y,r.w,r.h, 0,0,w,h);
     const d=g.getImageData(0,0,w,h).data; const lum=new Float32Array(w*h);
     for(let i=0,p=0;i<d.length;i+=4,p++) lum[p]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
     let sum=0,sum2=0,n=0;
@@ -247,16 +330,22 @@ function tick(){
   requestAnimationFrame(()=>setTimeout(tick,220));
 }
 
+// Capture only the reading window. Cropping here rather than on the
+// server means the room behind the page never leaves the browser, and
+// it raises the text-to-frame ratio into the band where detection
+// actually works.
 function grab(){
+  const r=cropRect(); if(!r) return null;
   const c=document.createElement('canvas');
-  c.width=video.videoWidth; c.height=video.videoHeight;
-  c.getContext('2d').drawImage(video,0,0);
+  c.width=r.w; c.height=r.h;
+  c.getContext('2d').drawImage(video, r.x,r.y,r.w,r.h, 0,0,r.w,r.h);
   return c.toDataURL('image/jpeg',0.95);
 }
 
 async function snap(){
   if(!stream) return;
-  const data=grab(); lastFrame=data;
+  const data=grab(); if(!data) return;
+  lastFrame=data;
   $('snap').disabled=true; $('resSub').textContent='جارٍ القراءة…';
   $('list').innerHTML='<div class="empty">جارٍ المعالجة…</div>';
   const t0=performance.now();
@@ -275,7 +364,17 @@ async function snap(){
   $('snap').disabled=false;
 }
 
+// Display-only diacritic filter. The server keeps text_raw untouched
+// and the saved JSON still carries every mark; this strips them from
+// the panel for pages that were printed bare, where the fine-tune's
+// guesses are noise rather than data.
+const TASHKEEL=/[ً-ٰٟۖ-ۭ]/g;
+const shown = t => hideDia ? t.replace(TASHKEEL,'') : t;
+
+let lastResult=null, lastWall=0;
+
 function render(r, wall){
+  lastResult=r; lastWall=wall;
   if(r.overlay_jpeg_b64){
     shot.src='data:image/jpeg;base64,'+r.overlay_jpeg_b64;
     shot.hidden=false; video.hidden=true; $('again').hidden=false;
@@ -308,10 +407,11 @@ function render(r, wall){
   }
   // The fine-tune adds marks to UNVOWELLED text. The spec forbids
   // guessing pronunciation, so say so when it happens.
-  if(r.config && r.config.lang==='ar' && marks>0){
+  if(r.config && r.config.lang==='ar' && marks>0 && !hideDia){
     const n=document.createElement('div'); n.className='note';
     n.textContent='التشكيل الظاهر هو ما قرأه النموذج. قد يُضيف النموذج '+
-      'حركات غير مطبوعة على الصفحة — راجِعه قبل الاعتماد عليه في النطق.';
+      'حركات غير مطبوعة على الصفحة — راجِعه قبل الاعتماد عليه في النطق. '+
+      'اضغط «بدون تشكيل» لعرض الحروف وحدها.';
     list.appendChild(n);
   }
   order.forEach(i=>{
@@ -322,12 +422,13 @@ function render(r, wall){
     sc.className='score '+(g.rec_score>=0.8?'hi':(g.rec_score>=0.6?'mid':'lo'));
     sc.textContent=g.rec_score.toFixed(2);
     const mk=document.createElement('span'); mk.className='marks';
-    mk.textContent=(g.tashkeel_count?('تشكيل '+g.tashkeel_count+' · '):'')+(g.dominant_script||'');
+    mk.textContent=(g.tashkeel_count&&!hideDia?('تشكيل '+g.tashkeel_count+' · '):'')+
+      (g.dominant_script||'');
     meta.appendChild(sc); meta.appendChild(mk);
     const tx=document.createElement('div');
     tx.className='txt'+(g.dominant_script==='arabic'?' ar':'');
     tx.dir = g.dominant_script==='arabic' ? 'rtl':'ltr';
-    tx.textContent=g.text_raw;
+    tx.textContent=shown(g.text_raw);
     row.appendChild(meta); row.appendChild(tx); list.appendChild(row);
   });
 }
@@ -335,8 +436,24 @@ function render(r, wall){
 $('start').onclick=start;
 $('stop').onclick=stop;
 $('snap').onclick=snap;
-$('again').onclick=()=>{ shot.hidden=true; video.hidden=false; $('again').hidden=true; };
+$('again').onclick=()=>{
+  shot.hidden=true; video.hidden=false; $('again').hidden=true; placeViewport();
+};
 $('cam').onchange=start;
+
+$('win').onclick=()=>{
+  useWindow=!useWindow;
+  $('win').classList.toggle('on', useWindow);
+  $('win').textContent = useWindow ? 'نافذة A5' : 'الإطار كامل';
+  showRes(); placeViewport();
+};
+
+$('dia').onclick=()=>{
+  hideDia=!hideDia;
+  $('dia').classList.toggle('on', hideDia);
+  $('dia').textContent = hideDia ? 'إظهار التشكيل' : 'بدون تشكيل';
+  if(lastResult) render(lastResult, lastWall);
+};
 
 fetch('/api/info').then(r=>r.json()).then(d=>{
   const ar=(d.models||[]).find(m=>m.lang==='ar');
