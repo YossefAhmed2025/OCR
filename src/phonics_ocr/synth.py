@@ -225,32 +225,76 @@ def load_lexicon(path: Optional[Path] = None) -> List[str]:
     return list(payload.get("words", []))
 
 
+def partially_vowelize(word: str, rng: random.Random, keep: float = 0.45) -> str:
+    """Drop a share of a word's marks, as partially-pointed print does."""
+    out: List[str] = []
+    for ch in word:
+        if pp.is_tashkeel(ch) and rng.random() > keep:
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
+#: How training lines are vowelled.
+#:
+#: NOT all-vowelled, which was the first fine-tune's mistake. Trained
+#: only on fully-pointed text, the model learned "always emit marks"
+#: and then invented 9 diacritics on a page printed without any --
+#: `كتب الولد` came back as `كَتب الْولَد`. The specification forbids
+#: guessing pronunciation, so the data has to contain bare text too.
+VOWEL_MIX: Dict[str, float] = {
+    "full": 0.55,     # fully pointed, as a children's reader prints it
+    "none": 0.30,     # bare text: teaches the model to emit nothing
+    "partial": 0.15,  # some marks only, as school books often print
+}
+
+
 def make_line(
     rng: random.Random,
     *,
     seed_words: Sequence[str] = SEED_WORDS,
     max_words: int = 4,
     real_word_prob: float = 0.92,
+    vowel_mix: Optional[Dict[str, float]] = None,
 ) -> str:
-    """One training line: between one and ``max_words`` vowelled words.
+    """One training line of one to ``max_words`` words.
 
     ``real_word_prob`` defaults high because random vowelization is
     actively harmful: measured, it taught the model to place marks
     without learning which mark belongs. The small remainder of
     synthetic words exists only to cover letter-diacritic pairs a
     finite lexicon misses.
+
+    ``vowel_mix`` decides how the whole line is pointed -- see
+    :data:`VOWEL_MIX`. The mode is chosen per LINE, not per word,
+    because that is how real pages are printed.
     """
+    mix = vowel_mix or VOWEL_MIX
+    roll = rng.random()
+    cumulative = 0.0
+    mode = "full"
+    for name, share in mix.items():
+        cumulative += share
+        if roll < cumulative:
+            mode = name
+            break
+
     count = rng.randint(1, max_words)
     pool = list(seed_words)
     words: List[str] = []
     for _ in range(count):
         if pool and rng.random() < real_word_prob:
-            # Real corpus words are used VERBATIM. Re-vowelizing them
-            # would reintroduce exactly the problem this fixes.
-            words.append(rng.choice(pool))
+            # Real corpus words are used VERBATIM when fully pointed.
+            # Re-vowelizing them would reintroduce the earlier bug.
+            word = rng.choice(pool)
         else:
-            words.append(random_word(rng))
-    return " ".join(words)
+            word = random_word(rng)
+        if mode == "none":
+            word = pp.strip_tashkeel(word)
+        elif mode == "partial":
+            word = partially_vowelize(word, rng)
+        words.append(word)
+    return " ".join(w for w in words if w)
 
 
 # ---------------------------------------------------------------------

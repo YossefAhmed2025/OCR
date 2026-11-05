@@ -44,6 +44,20 @@ RECOGNITION_MODELS: Final[Dict[str, str]] = {
     "en": "en_PP-OCRv5_mobile_rec",
 }
 
+#: Optional fine-tuned replacements, used when present on disk.
+#:
+#: The Arabic entry is our vowelled fine-tune. Measured against the
+#: stock model on a photographed page: character accuracy 59.4% ->
+#: 76.1%, diacritic recall 0.172 -> 0.453.
+#:
+#: It is listed for Arabic ONLY. Training on Arabic alone destroyed
+#: the stock model's Latin ability -- it reads "The boy wrote the
+#: lesson" as هَءَءمًا هَطًَأُ -- so English must keep using
+#: en_PP-OCRv5_mobile_rec.
+FINETUNED_MODELS: Final[Dict[str, str]] = {
+    "ar": "arabic_vowelled_rec_final",
+}
+
 #: PaddleOCR's own ``lang`` code for each of our language keys.
 PADDLE_LANG_CODES: Final[Dict[str, str]] = {"ar": "ar", "en": "en"}
 
@@ -126,6 +140,8 @@ class OCRConfig:
     #: cost is slower CPU inference. Ignored on GPU.
     enable_mkldnn: bool = False
     cpu_threads: int = 10
+    #: Use a fine-tuned recognition model where one is available.
+    use_finetuned: bool = True
     preprocess: PreprocessConfig = dataclasses.field(default_factory=PreprocessConfig)
 
     def __post_init__(self) -> None:
@@ -164,12 +180,33 @@ class OCRConfig:
         return MIXED_PASSES if self.lang == "mixed" else (self.lang,)
 
     def recognition_model(self, pass_lang: str) -> str:
+        """Model NAME for a pass (the architecture, not the weights)."""
         try:
             return RECOGNITION_MODELS[pass_lang]
         except KeyError:
             raise ConfigError(
                 f"No recognition model registered for {pass_lang!r}"
             ) from None
+
+    def recognition_weights_dir(self, pass_lang: str) -> Path:
+        """Directory the weights load from.
+
+        Prefers a fine-tuned build when ``use_finetuned`` is on and the
+        directory exists; otherwise the stock model. Returning the
+        stock path silently would hide which weights produced a
+        result, so :meth:`to_dict` records the choice.
+        """
+        if self.use_finetuned and pass_lang in FINETUNED_MODELS:
+            candidate = self.model_dir / FINETUNED_MODELS[pass_lang]
+            if candidate.is_dir() and any(candidate.iterdir()):
+                return candidate
+        return self.model_dir / self.recognition_model(pass_lang)
+
+    def uses_finetuned(self, pass_lang: str) -> bool:
+        return (
+            self.recognition_weights_dir(pass_lang).name
+            != self.recognition_model(pass_lang)
+        )
 
     def paddle_lang(self, pass_lang: str) -> str:
         try:
@@ -188,6 +225,10 @@ class OCRConfig:
             "ocr_version": OCR_VERSION,
             "detection_model": DETECTION_MODEL,
             "recognition_models": {p: self.recognition_model(p) for p in self.passes},
+            "recognition_weights": {
+                p: str(self.recognition_weights_dir(p)) for p in self.passes
+            },
+            "finetuned_in_use": {p: self.uses_finetuned(p) for p in self.passes},
             "model_dir": str(self.model_dir),
             "offline": self.offline,
             "det_limit_side_len": self.det_limit_side_len,

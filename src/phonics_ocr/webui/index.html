@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phonics Prism — OCR</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-2:#1c2230; --line:#272e3b;
+    --ink:#e8edf5; --muted:#8b97ab; --accent:#4f8cff; --accent-2:#2a5db0;
+    --ok:#3fb950; --warn:#d29922; --bad:#f06060;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; gap:14px;
+    padding:12px 20px; background:linear-gradient(90deg,#141a24,#10141b);
+    border-bottom:1px solid var(--line); flex:none;
+  }
+  .logo{
+    width:34px;height:34px;border-radius:9px;flex:none;
+    background:conic-gradient(from 210deg,#4f8cff,#9b6cff,#ff7ab6,#ffd166,#4f8cff);
+  }
+  .title{font-size:18px;font-weight:650;letter-spacing:.2px}
+  .subtitle{font-size:12px;color:var(--muted);margin-top:1px}
+  .spacer{flex:1}
+  .badge{
+    font-size:11px;padding:4px 9px;border-radius:999px;
+    border:1px solid var(--line);color:var(--muted);background:#121722;
+  }
+  .badge.on{color:var(--ok);border-color:#1f4d2b;background:#102416}
+
+  main{flex:1; display:grid; grid-template-columns:1fr 420px; min-height:0}
+  @media (max-width:980px){ main{grid-template-columns:1fr; grid-template-rows:1fr auto} }
+
+  .stage{
+    position:relative; background:#05070b; display:flex;
+    align-items:center; justify-content:center; overflow:hidden; min-height:0;
+  }
+  .stage video,.stage img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+  .stage .hint{position:absolute;color:var(--muted);font-size:14px;text-align:center;padding:20px}
+
+  .hud{
+    position:absolute; inset-inline-start:12px; top:12px;
+    display:flex; gap:8px; flex-wrap:wrap; pointer-events:none;
+  }
+  .chip{
+    font-size:11px;padding:4px 9px;border-radius:7px;
+    background:rgba(8,11,16,.82);border:1px solid var(--line);color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+
+  .controls{
+    position:absolute; bottom:0; inset-inline:0; padding:14px;
+    display:flex; gap:10px; align-items:center; justify-content:center;
+    background:linear-gradient(transparent,rgba(5,7,11,.9));
+  }
+  button,select{
+    font:inherit;color:var(--ink);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:9px;padding:9px 15px;cursor:pointer;
+  }
+  button:hover:not(:disabled),select:hover{border-color:#3a4557}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{
+    background:linear-gradient(180deg,var(--accent),var(--accent-2));
+    border-color:#3f6fd0;font-weight:600;padding:10px 24px;
+  }
+
+  aside{
+    background:var(--panel);border-inline-start:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .head{padding:14px 16px;border-bottom:1px solid var(--line);flex:none}
+  .head h2{margin:0;font-size:14px;font-weight:600}
+  .head .sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);flex:none}
+  .stat{background:var(--panel);padding:11px 8px;text-align:center}
+  .stat .v{font-size:19px;font-weight:650;font-variant-numeric:tabular-nums}
+  .stat .k{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
+
+  .list{flex:1;overflow-y:auto;padding:10px;min-height:0}
+  .row{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;margin-bottom:8px;
+  }
+  .row .meta{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .score{
+    font-size:11px;font-weight:650;padding:2px 7px;border-radius:5px;
+    font-variant-numeric:tabular-nums;
+  }
+  .score.hi{background:#102416;color:var(--ok)}
+  .score.mid{background:#2a2310;color:var(--warn)}
+  .score.lo{background:#2a1313;color:var(--bad)}
+  .marks{font-size:10px;color:var(--muted)}
+  .txt{font-size:21px;line-height:1.95;word-break:break-word}
+  .txt.ar{font-family:"Traditional Arabic","Simplified Arabic",Tahoma,serif;font-size:25px}
+  .empty{color:var(--muted);text-align:center;padding:34px 16px;font-size:13px;line-height:1.7}
+  .note{
+    margin:10px;padding:9px 11px;border-radius:9px;font-size:11px;line-height:1.6;
+    background:#241c0c;border:1px solid #4a3a12;color:#e8cf95;
+  }
+  .foot{
+    padding:9px 14px;border-top:1px solid var(--line);
+    font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex:none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"></div>
+  <div>
+    <div class="title">موشور الصوتيات · Phonics Prism</div>
+    <div class="subtitle">قارئ النصوص العربية والإنجليزية — يعمل محليًا بدون إنترنت</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="badge on" id="offlineBadge">● محلي</span>
+  <span class="badge" id="modelBadge">…</span>
+</header>
+
+<main>
+  <section class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <img id="shot" alt="" hidden>
+    <div class="hint" id="hint">اضغط «تشغيل الكاميرا» للبدء</div>
+    <div class="hud" id="hud" hidden>
+      <span class="chip" id="chipRes">—</span>
+      <span class="chip" id="chipSharp">—</span>
+    </div>
+    <div class="controls">
+      <select id="lang" title="اللغة">
+        <option value="ar">عربي</option>
+        <option value="en">English</option>
+        <option value="mixed">مختلط (تجريبي)</option>
+      </select>
+      <select id="cam" title="الكاميرا" hidden></select>
+      <button id="start">تشغيل الكاميرا</button>
+      <button id="snap" class="primary" disabled>التقاط وقراءة</button>
+      <button id="again" hidden>رجوع للبث</button>
+      <button id="stop" disabled>إيقاف</button>
+    </div>
+  </section>
+
+  <aside>
+    <div class="head">
+      <h2>النتيجة</h2>
+      <div class="sub" id="resSub">لم يتم التقاط صورة بعد</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="sLines">—</div><div class="k">سطور</div></div>
+      <div class="stat"><div class="v" id="sMarks">—</div><div class="k">تشكيل</div></div>
+      <div class="stat"><div class="v" id="sConf">—</div><div class="k">الثقة</div></div>
+    </div>
+    <div class="list" id="list">
+      <div class="empty">
+        وجّه الكاميرا إلى صفحة مطبوعة<br>ثم اضغط «التقاط وقراءة»
+      </div>
+    </div>
+    <div class="foot">
+      <span id="fTime">—</span>
+      <span id="fModel">—</span>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const video=$('video'), shot=$('shot'), hint=$('hint'), hud=$('hud');
+let stream=null, lastFrame=null;
+
+function setChip(el, text, cls){ el.textContent=text; el.className='chip'+(cls?' '+cls:''); }
+
+async function listCams(){
+  try{
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+    if(devs.length>1){
+      $('cam').hidden=false; $('cam').innerHTML='';
+      devs.forEach((d,i)=>{
+        const o=document.createElement('option');
+        o.value=d.deviceId; o.textContent=d.label||('كاميرا '+(i+1));
+        $('cam').appendChild(o);
+      });
+    }
+  }catch(e){}
+}
+
+async function start(){
+  const id = $('cam').value;
+  const constraints = { audio:false, video: id
+      ? { deviceId:{exact:id}, width:{ideal:1920}, height:{ideal:1080} }
+      : { facingMode:'environment', width:{ideal:1920}, height:{ideal:1080} } };
+  try{
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+  }catch(e){
+    hint.hidden=false;
+    hint.innerHTML='تعذّر فتح الكاميرا<br><span style="font-size:12px">'+e.message+
+      '</span><br><span style="font-size:12px;color:#8b97ab">تأكد من السماح للمتصفح باستخدام الكاميرا</span>';
+    return;
+  }
+  video.srcObject=stream; video.hidden=false; shot.hidden=true;
+  hint.hidden=true; hud.hidden=false;
+  $('snap').disabled=false; $('stop').disabled=false; $('start').textContent='إعادة التشغيل';
+  await listCams();
+  video.onloadedmetadata=()=>setChip($('chipRes'), video.videoWidth+'×'+video.videoHeight);
+  tick();
+}
+
+function stop(){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  stream=null; video.srcObject=null; hud.hidden=true;
+  $('snap').disabled=true; $('stop').disabled=true;
+  hint.hidden=false; hint.textContent='الكاميرا متوقفة';
+}
+
+// Live sharpness, measured on a small grayscale centre crop with a
+// Laplacian-style kernel. Measured on real captures: below ~150 the
+// recogniser loses diacritics, so the chip warns before you shoot
+// rather than after.
+function tick(){
+  if(!stream) return;
+  if(video.videoWidth){
+    const w=220,h=160,c=document.createElement('canvas');
+    c.width=w;c.height=h;
+    const g=c.getContext('2d',{willReadFrequently:true});
+    const sx=(video.videoWidth-video.videoWidth*0.5)/2, sy=(video.videoHeight-video.videoHeight*0.5)/2;
+    g.drawImage(video,sx,sy,video.videoWidth*0.5,video.videoHeight*0.5,0,0,w,h);
+    const d=g.getImageData(0,0,w,h).data; const lum=new Float32Array(w*h);
+    for(let i=0,p=0;i<d.length;i+=4,p++) lum[p]=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    let sum=0,sum2=0,n=0;
+    for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++){
+      const i=y*w+x;
+      const v=4*lum[i]-lum[i-1]-lum[i+1]-lum[i-w]-lum[i+w];
+      sum+=v; sum2+=v*v; n++;
+    }
+    const varr=sum2/n-(sum/n)**2;
+    const s=Math.round(varr);
+    setChip($('chipSharp'),'وضوح '+s, s>=150?'ok':(s>=90?'warn':'bad'));
+  }
+  requestAnimationFrame(()=>setTimeout(tick,220));
+}
+
+function grab(){
+  const c=document.createElement('canvas');
+  c.width=video.videoWidth; c.height=video.videoHeight;
+  c.getContext('2d').drawImage(video,0,0);
+  return c.toDataURL('image/jpeg',0.95);
+}
+
+async function snap(){
+  if(!stream) return;
+  const data=grab(); lastFrame=data;
+  $('snap').disabled=true; $('resSub').textContent='جارٍ القراءة…';
+  $('list').innerHTML='<div class="empty">جارٍ المعالجة…</div>';
+  const t0=performance.now();
+  let r;
+  try{
+    const res=await fetch('/api/ocr',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:data, lang:$('lang').value})});
+    r=await res.json();
+    if(!res.ok) throw new Error(r.error||('HTTP '+res.status));
+  }catch(e){
+    $('resSub').textContent='فشل';
+    $('list').innerHTML='<div class="empty" style="color:#f06060">'+e.message+'</div>';
+    $('snap').disabled=false; return;
+  }
+  render(r, (performance.now()-t0)/1000);
+  $('snap').disabled=false;
+}
+
+function render(r, wall){
+  if(r.overlay_jpeg_b64){
+    shot.src='data:image/jpeg;base64,'+r.overlay_jpeg_b64;
+    shot.hidden=false; video.hidden=true; $('again').hidden=false;
+  }
+  const regions=r.regions||[];
+  const order=(r.reading_order&&r.reading_order.region_indices)||regions.map((_,i)=>i);
+  const marks=regions.reduce((a,x)=>a+(x.tashkeel_count||0),0);
+  const conf=regions.length? regions.reduce((a,x)=>a+x.rec_score,0)/regions.length : 0;
+
+  $('sLines').textContent=regions.length;
+  $('sMarks').textContent=marks;
+  $('sConf').textContent=regions.length? conf.toFixed(2) : '—';
+  $('resSub').textContent='لقطة '+(r.capture?r.capture.index:'—')+
+     ' · '+(r.timing?r.timing.inference_seconds.toFixed(2):'?')+' ث';
+  $('fTime').textContent='زمن كامل '+wall.toFixed(2)+' ث · '+(r.device_used||'');
+  $('fModel').textContent=r.weights_used||'';
+
+  const list=$('list'); list.innerHTML='';
+
+  const a=r.capture&&r.capture.frame_assessment;
+  if(a&&a.hints&&a.hints.length){
+    const n=document.createElement('div'); n.className='note';
+    n.textContent='تنبيه الصورة: '+a.hints.join(' · ');
+    list.appendChild(n);
+  }
+  if(!regions.length){
+    const e=document.createElement('div'); e.className='empty';
+    e.innerHTML='لم يُعثر على نص.<br>قرّب الورقة لتملأ الإطار، وثبّتها موازية للكاميرا.';
+    list.appendChild(e); return;
+  }
+  // The fine-tune adds marks to UNVOWELLED text. The spec forbids
+  // guessing pronunciation, so say so when it happens.
+  if(r.config && r.config.lang==='ar' && marks>0){
+    const n=document.createElement('div'); n.className='note';
+    n.textContent='التشكيل الظاهر هو ما قرأه النموذج. قد يُضيف النموذج '+
+      'حركات غير مطبوعة على الصفحة — راجِعه قبل الاعتماد عليه في النطق.';
+    list.appendChild(n);
+  }
+  order.forEach(i=>{
+    const g=regions[i]; if(!g) return;
+    const row=document.createElement('div'); row.className='row';
+    const meta=document.createElement('div'); meta.className='meta';
+    const sc=document.createElement('span');
+    sc.className='score '+(g.rec_score>=0.8?'hi':(g.rec_score>=0.6?'mid':'lo'));
+    sc.textContent=g.rec_score.toFixed(2);
+    const mk=document.createElement('span'); mk.className='marks';
+    mk.textContent=(g.tashkeel_count?('تشكيل '+g.tashkeel_count+' · '):'')+(g.dominant_script||'');
+    meta.appendChild(sc); meta.appendChild(mk);
+    const tx=document.createElement('div');
+    tx.className='txt'+(g.dominant_script==='arabic'?' ar':'');
+    tx.dir = g.dominant_script==='arabic' ? 'rtl':'ltr';
+    tx.textContent=g.text_raw;
+    row.appendChild(meta); row.appendChild(tx); list.appendChild(row);
+  });
+}
+
+$('start').onclick=start;
+$('stop').onclick=stop;
+$('snap').onclick=snap;
+$('again').onclick=()=>{ shot.hidden=true; video.hidden=false; $('again').hidden=true; };
+$('cam').onchange=start;
+
+fetch('/api/info').then(r=>r.json()).then(d=>{
+  const ar=(d.models||[]).find(m=>m.lang==='ar');
+  $('modelBadge').textContent = ar && ar.finetuned ? 'نموذج مُدرَّب' : 'نموذج أساسي';
+  if(ar&&ar.finetuned) $('modelBadge').className='badge on';
+}).catch(()=>{});
+</script>
+</body>
+</html>

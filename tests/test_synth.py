@@ -104,10 +104,13 @@ class TestLineGeneration:
             line = synth.make_line(rng, max_words=3)
             assert 1 <= len(line.split()) <= 3
 
-    def test_lines_carry_diacritics(self):
+    def test_most_lines_carry_diacritics(self):
+        # Not ALL of them: VOWEL_MIX deliberately emits bare lines so
+        # the model learns to print nothing when nothing is printed.
         rng = random.Random(7)
-        lines = [synth.make_line(rng) for _ in range(40)]
-        assert all(pp.count_tashkeel(line) > 0 for line in lines)
+        lines = [synth.make_line(rng) for _ in range(300)]
+        marked = sum(1 for line in lines if pp.count_tashkeel(line) > 0)
+        assert marked / len(lines) > 0.5
 
     def test_random_words_are_arabic(self):
         rng = random.Random(8)
@@ -268,18 +271,98 @@ class TestVowelledLexicon:
         for word in words[:500]:
             assert all(pp.is_arabic_char(c) for c in word), word
 
-    def test_real_words_are_used_verbatim(self):
-        # Re-vowelizing a corpus word would reintroduce the exact bug
-        # this change fixes.
+    def test_real_words_are_used_verbatim_when_fully_pointed(self):
+        # Re-vowelizing a corpus word would reintroduce the bug this
+        # change fixed. Only the "full" mode is checked here: the bare
+        # and partial modes strip marks on purpose.
         known = ["\u0645\u0650\u0646\u0652", "\u0642\u064e\u0627\u0644\u064e"]
+        full_only = {"full": 1.0, "none": 0.0, "partial": 0.0}
         rng = random.Random(3)
         seen = set()
         for _ in range(60):
-            seen.update(synth.make_line(rng, seed_words=known, real_word_prob=1.0).split())
+            seen.update(
+                synth.make_line(
+                    rng, seed_words=known, real_word_prob=1.0, vowel_mix=full_only
+                ).split()
+            )
         assert seen <= set(known)
+
+    def test_bare_mode_yields_the_stripped_corpus_word(self):
+        known = ["\u0642\u064e\u0627\u0644\u064e"]
+        bare_only = {"full": 0.0, "none": 1.0, "partial": 0.0}
+        rng = random.Random(4)
+        line = synth.make_line(
+            rng, seed_words=known, real_word_prob=1.0, vowel_mix=bare_only
+        )
+        assert line == pp.strip_tashkeel(known[0])
 
     def test_default_real_word_prob_is_high(self):
         import inspect
 
         default = inspect.signature(synth.make_line).parameters["real_word_prob"].default
         assert default >= 0.9
+
+
+class TestVowelMix:
+    """Training lines must include BARE text, not only pointed text.
+
+    The first fine-tune trained on 100% vowelled lines and then
+    invented 9 diacritics on a page printed without any. The
+    specification forbids guessing pronunciation, so the data has to
+    contain unvowelled lines for the model to learn to emit nothing.
+    """
+
+    def test_mix_shares_sum_to_one(self):
+        assert abs(sum(synth.VOWEL_MIX.values()) - 1.0) < 1e-6
+
+    def test_mix_contains_a_real_share_of_bare_text(self):
+        assert synth.VOWEL_MIX["none"] >= 0.2
+
+    def test_generated_lines_include_unvowelled_ones(self):
+        rng = random.Random(11)
+        words = ["\u0643\u064e\u062a\u064e\u0628\u064e", ZAHRA]
+        lines = [synth.make_line(rng, seed_words=words, max_words=2) for _ in range(400)]
+        bare = sum(1 for line in lines if pp.count_tashkeel(line) == 0)
+        assert 0.15 < bare / len(lines) < 0.5
+
+    def test_generated_lines_still_mostly_carry_marks(self):
+        rng = random.Random(12)
+        words = ["\u0643\u064e\u062a\u064e\u0628\u064e", ZAHRA]
+        lines = [synth.make_line(rng, seed_words=words, max_words=2) for _ in range(400)]
+        marked = sum(1 for line in lines if pp.count_tashkeel(line) > 0)
+        assert marked / len(lines) > 0.5
+
+    def test_bare_lines_keep_the_consonant_skeleton(self):
+        rng = random.Random(13)
+        mix = {"full": 0.0, "none": 1.0, "partial": 0.0}
+        line = synth.make_line(rng, seed_words=[ZAHRA], max_words=1, vowel_mix=mix)
+        assert pp.count_tashkeel(line) == 0
+        assert line == pp.strip_tashkeel(ZAHRA)
+
+    def test_full_mode_keeps_every_mark(self):
+        rng = random.Random(14)
+        mix = {"full": 1.0, "none": 0.0, "partial": 0.0}
+        line = synth.make_line(rng, seed_words=[ZAHRA], max_words=1, vowel_mix=mix)
+        assert pp.count_tashkeel(line) == pp.count_tashkeel(ZAHRA)
+
+    def test_partial_drops_some_but_not_all(self):
+        rng = random.Random(15)
+        source = "\u0645\u064f\u0639\u064e\u0644\u0651\u0650\u0645\u064c"
+        counts = {
+            pp.count_tashkeel(synth.partially_vowelize(source, rng))
+            for _ in range(60)
+        }
+        full = pp.count_tashkeel(source)
+        assert min(counts) < full
+        assert max(counts) <= full
+
+    def test_partial_never_adds_marks(self):
+        rng = random.Random(16)
+        for _ in range(50):
+            out = synth.partially_vowelize(ZAHRA, rng)
+            assert pp.count_tashkeel(out) <= pp.count_tashkeel(ZAHRA)
+
+    def test_partial_keeps_the_skeleton(self):
+        rng = random.Random(17)
+        out = synth.partially_vowelize(ZAHRA, rng)
+        assert pp.strip_tashkeel(out) == pp.strip_tashkeel(ZAHRA)

@@ -223,7 +223,11 @@ class OCREngine:
         for pass_lang in self.config.passes:
             rec_model = self.config.recognition_model(pass_lang)
             det_dir = self._local_model_dir(DETECTION_MODEL)
-            rec_dir = self._local_model_dir(rec_model)
+            # Weights may come from a fine-tuned build; the NAME stays
+            # the stock one because that is the architecture PaddleOCR
+            # instantiates.
+            weights = self.config.recognition_weights_dir(pass_lang)
+            rec_dir = str(weights) if weights.is_dir() and any(weights.iterdir()) else None
 
             if self.config.offline:
                 missing = []
